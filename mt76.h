@@ -894,9 +894,11 @@ struct mt76_dev {
 		struct mt76_sdio sdio;
 	};
 
+	/* for mtk internal */
 	struct mt76_connac2_patch_hdr *patch_hdr;
 	struct mt76_connac2_fw_trailer *wm_hdr;
 	struct mt76_connac2_fw_trailer *wa_hdr;
+	const char *bin_file_name;
 };
 
 struct mt76_power_limits {
@@ -1033,6 +1035,7 @@ void mt76_seq_puts_array(struct seq_file *file, const char *str,
 int mt76_eeprom_init(struct mt76_dev *dev, int len);
 void mt76_eeprom_override(struct mt76_phy *phy);
 int mt76_get_of_eeprom(struct mt76_dev *dev, void *data, int offset, int len);
+bool mt76_check_bin_file_mode(struct mt76_dev *dev);
 
 struct mt76_queue *
 mt76_init_queue(struct mt76_dev *dev, int qid, int idx, int n_desc,
