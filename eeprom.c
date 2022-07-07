@@ -104,6 +104,26 @@ out_put_node:
 }
 EXPORT_SYMBOL_GPL(mt76_get_of_eeprom);
 
+bool mt76_check_bin_file_mode(struct mt76_dev *dev)
+{
+	struct device_node *np = dev->dev->of_node;
+	const char *bin_file_name = NULL;
+
+	if (!np)
+		return false;
+
+	of_property_read_string(np, "bin_file_name", &bin_file_name);
+
+	dev->bin_file_name = bin_file_name;
+	if (dev->bin_file_name)
+		dev_info(dev->dev, "Using bin file %s\n", dev->bin_file_name);
+
+	of_node_put(np);
+
+	return dev->bin_file_name ? true : false;
+}
+EXPORT_SYMBOL_GPL(mt76_check_bin_file_mode);
+
 void
 mt76_eeprom_override(struct mt76_phy *phy)
 {
