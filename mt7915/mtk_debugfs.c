@@ -2722,6 +2722,22 @@ static int mt7915_agginfo_read_band1(struct seq_file *s, void *data)
 	return 0;
 }
 
+static int mt7915_dump_version(struct seq_file *s, void *data)
+{
+	struct mt7915_dev *dev = dev_get_drvdata(s->private);
+	struct mt76_dev *mdev = NULL;
+	seq_printf(s, "Version: 2.2.8.0\n");
+
+	if (!test_bit(MT76_STATE_MCU_RUNNING, &dev->mphy.state))
+		return 0;
+
+	mdev = &dev->mt76;
+	seq_printf(s, "Rom Patch Build Time: %.16s\n", mdev->patch_hdr->build_date);
+	seq_printf(s, "WM Patch Build Time: %.16s\n", mdev->wm_hdr->build_date);
+	seq_printf(s, "WA Patch Build Time: %.16s\n", mdev->wa_hdr->build_date);
+	return 0;
+}
+
 /*usage: <en> <num> <len>
 	en: BIT(16) 0: sw amsdu  1: hw amsdu
 	num: GENMASK(15, 8) range 1-8
@@ -2954,6 +2970,9 @@ int mt7915_mtk_init_debugfs(struct mt7915_phy *phy, struct dentry *dir)
 			    &fops_txpower_level);
 
 	debugfs_create_u8("sku_disable", 0600, dir, &dev->dbg.sku_disable);
+
+	debugfs_create_devm_seqfile(dev->mt76.dev, "fw_version", dir,
+				    mt7915_dump_version);
 
 	return 0;
 }
