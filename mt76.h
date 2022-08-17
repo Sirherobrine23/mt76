@@ -837,6 +837,10 @@ struct mt76_dev {
 		struct mt76_usb usb;
 		struct mt76_sdio sdio;
 	};
+
+	struct mt76_connac2_patch_hdr *patch_hdr;
+	struct mt76_connac2_fw_trailer *wm_hdr;
+	struct mt76_connac2_fw_trailer *wa_hdr;
 };
 
 struct mt76_power_limits {
