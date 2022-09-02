@@ -2375,7 +2375,16 @@ int mt7915_mcu_init_firmware(struct mt7915_dev *dev)
 						dev->mt76.mmio.wed.rev_id, 0);
 		if (ret)
 			return ret;
+
+		ret = mt7915_mcu_set_red(dev, true);
+		if (ret)
+			return ret;
+	} else {
+		mt7915_mcu_set_red(dev, false);
+		if (ret)
+			return ret;
 	}
+
 
 	ret = mt7915_mcu_set_mwds(dev, 1);
 	if (ret)
@@ -2386,12 +2395,7 @@ int mt7915_mcu_init_firmware(struct mt7915_dev *dev)
 	if (ret)
 		return ret;
 
-	ret = mt7915_mcu_init_rx_airtime(dev);
-	if (ret)
-		return ret;
-
-	return mt7915_mcu_wa_cmd(dev, MCU_WA_PARAM_CMD(SET),
-				 MCU_WA_PARAM_RED, 0, 0);
+	return mt7915_mcu_init_rx_airtime(dev);
 }
 
 int mt7915_mcu_init(struct mt7915_dev *dev)
@@ -4540,6 +4544,34 @@ int mt7915_dbg_mcu_wa_cmd(struct mt7915_dev *dev, int cmd, u32 a1, u32 a2, u32 a
 
 	return mt76_mcu_send_msg(&dev->mt76, cmd, &req, sizeof(req), wait_resp);
 }
+#endif
+
+static int mt7915_red_set_watermark(struct mt7915_dev *dev)
+{
+#define RED_GLOBAL_TOKEN_WATERMARK 2
+	struct {
+		__le32 args[3];
+
+		u8 cmd;
+		u8 version;
+		u8 __rsv1[4];
+		u16 len;
+
+		__le16 high_mark;
+		__le16 low_mark;
+		u8 __rsv2[12];
+	} req = {
+		.args[0] = cpu_to_le32(MCU_WA_PARAM_RED_SETTING),
+		.cmd = RED_GLOBAL_TOKEN_WATERMARK,
+		.len = cpu_to_le16(sizeof(req) - 12),
+
+		.high_mark = cpu_to_le16(MT7915_HW_TOKEN_SIZE - 256),
+		.low_mark = cpu_to_le16(MT7915_HW_TOKEN_SIZE - 256 - 1536),
+	};
+
+	return mt76_mcu_send_msg(&dev->mt76, MCU_WA_PARAM_CMD(SET), &req,
+				 sizeof(req), false);
+}
 
 int mt7915_mcu_set_red(struct mt7915_dev *dev, bool enabled)
 {
@@ -4550,17 +4582,21 @@ int mt7915_mcu_set_red(struct mt7915_dev *dev, bool enabled)
 	u32 red_type = enabled > 0 ? RED_BY_WA_ENABLE : RED_DISABLE;
 	__le32 req = cpu_to_le32(red_type);
 
+	if (enabled) {
+		ret = mt7915_red_set_watermark(dev);
+		if (ret < 0)
+			return ret;
+	}
+
 	ret = mt76_mcu_send_msg(&dev->mt76, MCU_EXT_CMD(RED_ENABLE), &req,
 				 sizeof(req), false);
 	if (ret < 0)
 		return ret;
 
-	mt7915_dbg_mcu_wa_cmd(dev, MCU_WA_PARAM_CMD(SET),
-			  MCU_WA_PARAM_RED, enabled, 0, true);
+	return mt7915_mcu_wa_cmd(dev, MCU_WA_PARAM_CMD(SET),
+				 MCU_WA_PARAM_RED, enabled, 0);
 
-	return 0;
 }
-#endif
 
 int mt7915_mcu_rf_regval(struct mt7915_dev *dev, u32 regidx, u32 *val, bool set)
 {
