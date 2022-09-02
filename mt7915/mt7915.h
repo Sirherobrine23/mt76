@@ -56,6 +56,7 @@
 
 #define MT7915_EEPROM_BLOCK_SIZE	16
 #define MT7915_TOKEN_SIZE		8192
+#define MT7915_HW_TOKEN_SIZE		7168
 
 #define MT7915_CFEND_RATE_DEFAULT	0x49	/* OFDM 24M */
 #define MT7915_CFEND_RATE_11B		0x03	/* 11B LP, 11M */
@@ -771,13 +772,14 @@ int mt7915_vendor_amnt_sta_remove(struct mt7915_phy *phy,
 #endif
 int mt7915_mcu_set_edcca(struct mt7915_phy *phy, int mode, u8 *value, s8 compensation);
 int mt7915_mcu_get_edcca(struct mt7915_phy *phy, u8 mode, s8 *value);
+int mt7915_mcu_set_red(struct mt7915_dev *dev, bool enabled);
+
 int mt7915_mcu_ipi_hist_ctrl(struct mt7915_phy *phy, void *data, u8 cmd, bool wait_resp);
 int mt7915_mcu_ipi_hist_scan(struct mt7915_phy *phy, void *data, u8 mode, bool wait_resp);
 
 #ifdef MTK_DEBUG
 int mt7915_mtk_init_debugfs(struct mt7915_phy *phy, struct dentry *dir);
 int mt7915_dbg_mcu_wa_cmd(struct mt7915_dev *dev, int cmd, u32 a1, u32 a2, u32 a3, bool wait_resp);
-int mt7915_mcu_set_red(struct mt7915_dev *dev, bool enabled);
 void mt7915_dump_tmac_info(u8 *tmac_info);
 int mt7915_mcu_set_txpower_level(struct mt7915_phy *phy, u8 drop_level);
 void mt7915_packet_log_to_host(struct mt7915_dev *dev, const void *data, int len, int type, int des_len);
