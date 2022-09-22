@@ -856,12 +856,22 @@ mt7986_show_host_dma_info(struct seq_file *s, struct mt7915_dev *dev)
 		      "Name", "Base", "Cnt", "CIDX", "DIDX", "QCnt");
 	dump_dma_tx_ring_info(s, dev, "T16:FWDL", MT_DBG_TX_RING_CTRL(0));
 	dump_dma_tx_ring_info(s, dev, "T17:Cmd(H2WM)",	MT_DBG_TX_RING_CTRL(1));
-	dump_dma_tx_ring_info(s, dev, "T18:TXD0(H2WA)",  MT_DBG_TX_RING_CTRL(2));
-	dump_dma_tx_ring_info(s, dev, "T19:TXD1(H2WA)",  MT_DBG_TX_RING_CTRL(3));
+
+	if (is_mt7916(&dev->mt76) && mtk_wed_device_active(&dev->mt76.mmio.wed)) {
+		dump_dma_tx_ring_info(s, dev, "T18:TXD0(H2WA)",  MT_DBG_WFDMA_WED_TX_CTRL(0));
+		dump_dma_tx_ring_info(s, dev, "T19:TXD1(H2WA)",  MT_DBG_WFDMA_WED_TX_CTRL(1));
+	} else {
+		dump_dma_tx_ring_info(s, dev, "T18:TXD0(H2WA)",  MT_DBG_TX_RING_CTRL(2));
+		dump_dma_tx_ring_info(s, dev, "T19:TXD1(H2WA)",  MT_DBG_TX_RING_CTRL(3));
+	}
+
 	dump_dma_tx_ring_info(s, dev, "T20:Cmd(H2WA)",	MT_DBG_TX_RING_CTRL(4));
 	dump_dma_rx_ring_info(s, dev, "R0:Event(WM2H)", MT_DBG_RX_DATA_RING_CTRL(0));
 	dump_dma_rx_ring_info(s, dev, "R1:Event(WA2H)", MT_DBG_RX_EVENT_RING_CTRL(1));
-	dump_dma_rx_ring_info(s, dev, "R2:TxDone(WA2H)", MT_DBG_RX_EVENT_RING_CTRL(2));
+	if (is_mt7916(&dev->mt76) && mtk_wed_device_active(&dev->mt76.mmio.wed))
+		dump_dma_rx_ring_info(s, dev, "R2:TxDone(WA2H)", MT_DBG_WFDMA_WED_RX_CTRL(1));
+	else
+		dump_dma_rx_ring_info(s, dev, "R2:TxDone(WA2H)", MT_DBG_RX_EVENT_RING_CTRL(2));
 	dump_dma_rx_ring_info(s, dev, "R3:TxDone1(WA2H)", MT_DBG_RX_EVENT_RING_CTRL(3));
 	dump_dma_rx_ring_info(s, dev, "R4:Data0(MAC2H)", MT_DBG_RX_DATA_RING_CTRL(0));
 	dump_dma_rx_ring_info(s, dev, "R5:Data1(MAC2H)", MT_DBG_RX_DATA_RING_CTRL(1));

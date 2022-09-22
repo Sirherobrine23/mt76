@@ -133,6 +133,8 @@ enum dbg_reg_rev {
 	DBG_MIB_M0ARNG0,
 	DBG_MIB_M0DR2,
 	DBG_MIB_M0DR13,
+	DBG_WFDMA_WED_TX_CTRL,
+	DBG_WFDMA_WED_RX_CTRL,
 	__MT_DBG_REG_REV_MAX,
 };
 
@@ -177,6 +179,8 @@ static const u32 mt7986_dbg_base[] = {
 
 /* mt7915 regs with different base and offset */
 static const struct __dbg_reg mt7915_dbg_reg[] = {
+	[DBG_WFDMA_WED_TX_CTRL]		= { MT_DBG_WFDMA_EXT_CSR_BASE, 0x300 },
+	[DBG_WFDMA_WED_RX_CTRL]		= { MT_DBG_WFDMA_EXT_CSR_BASE, 0x400 },
 	[DBG_INT_SOURCE_CSR]		= { MT_DBG_WFDMA_EXT_CSR_BASE, 0x10 },
 	[DBG_INT_MASK_CSR]		= { MT_DBG_WFDMA_EXT_CSR_BASE, 0x14 },
 	[DBG_INT1_SOURCE_CSR]		= { MT_DBG_WFDMA_EXT_CSR_BASE, 0x88 },
@@ -281,6 +285,8 @@ static const struct __dbg_reg mt7915_dbg_reg[] = {
 
 /* mt7986/mt7916 regs with different base and offset */
 static const struct __dbg_reg mt7916_dbg_reg[] = {
+	[DBG_WFDMA_WED_TX_CTRL]		= { MT_DBG_WFDMA_EXT_CSR_BASE, 0x300 },
+	[DBG_WFDMA_WED_RX_CTRL]		= { MT_DBG_WFDMA_EXT_CSR_BASE, 0x400 },
 	[DBG_INT_SOURCE_CSR]		= { MT_DBG_WFDMA0_BASE, 0x200 },
 	[DBG_INT_MASK_CSR]		= { MT_DBG_WFDMA0_BASE, 0x204 },
 	[DBG_INT1_SOURCE_CSR]		= { MT_DBG_WFDMA0_PCIE1_BASE, 0x200 },
@@ -450,11 +456,15 @@ struct bin_debug_hdr {
 #define MT_DBG_RX_EVENT_RING_BASE		__DBG_REG(dev, DBG_RX_EVENT_RING_BASE)
 #define MT_DBG_RX_STS_RING_BASE			__DBG_REG(dev, DBG_RX_STS_RING_BASE)
 #define MT_DBG_RX_DATA_RING_BASE		__DBG_REG(dev, DBG_RX_DATA_RING_BASE)
+#define MT_DBG_WFDMA_WED_TX_CTRL_BASE		__DBG_REG(dev, DBG_WFDMA_WED_TX_CTRL)
+#define MT_DBG_WFDMA_WED_RX_CTRL_BASE		__DBG_REG(dev, DBG_WFDMA_WED_RX_CTRL)
 
 #define MT_DBG_TX_RING_CTRL(n)			(MT_DBG_TX_RING_BASE + (0x10 * (n)))
 #define MT_DBG_RX_DATA_RING_CTRL(n)		(MT_DBG_RX_DATA_RING_BASE + (0x10 * (n)))
 #define MT_DBG_RX_EVENT_RING_CTRL(n)		(MT_DBG_RX_EVENT_RING_BASE + (0x10 * (n)))
 
+#define MT_DBG_WFDMA_WED_TX_CTRL(n)		(MT_DBG_WFDMA_WED_TX_CTRL_BASE + (0x10 * (n)))
+#define MT_DBG_WFDMA_WED_RX_CTRL(n)		(MT_DBG_WFDMA_WED_RX_CTRL_BASE + (0x10 * (n)))
 /* WFDMA COMMON */
 #define MT_DBG_INT_SOURCE_CSR			__DBG_REG(dev, DBG_INT_SOURCE_CSR)
 #define MT_DBG_INT_MASK_CSR			__DBG_REG(dev, DBG_INT_MASK_CSR)
