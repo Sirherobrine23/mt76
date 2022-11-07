@@ -127,6 +127,58 @@ struct mt7915_twt_flow {
 
 DECLARE_EWMA(avg_signal, 10, 8)
 
+#define VOW_MAX_STA_DWRR_NUM    8
+#define VOW_WATF_LEVEL_NUM      4
+#define VOW_FEATURE_BWCG        BIT(3)
+#define UMAC_BWC_GROUP_MIN      40
+
+
+enum ext_cmd_vow_drr_ctrl {
+	/* Type 1 */
+	VOW_DRR_STA_ALL             	= 0x00,
+	VOW_DRR_STA_BSS_GROUP           = 0x01,
+	VOW_DRR_STA_AC0_QUA_ID      	= 0x03,
+	VOW_DRR_STA_AC1_QUA_ID      	= 0x04,
+	VOW_DRR_STA_AC2_QUA_ID      	= 0x05,
+	VOW_DRR_STA_AC3_QUA_ID      	= 0x06,
+
+	/* Type 2 */
+	VOW_DRR_AIRTIME_DEFICIT_BOUND   = 0x10,
+
+	/* Type 3 */
+	VOW_DRR_AIRTIME_QUANTUM_L0  	= 0x20,
+	VOW_DRR_AIRTIME_QUANTUM_L1  	= 0x21,
+	VOW_DRR_AIRTIME_QUANTUM_L2  	= 0x22,
+	VOW_DRR_AIRTIME_QUANTUM_L3  	= 0x23,
+	VOW_DRR_AIRTIME_QUANTUM_L4  	= 0x24,
+	VOW_DRR_AIRTIME_QUANTUM_L5  	= 0x25,
+	VOW_DRR_AIRTIME_QUANTUM_L6  	= 0x26,
+	VOW_DRR_AIRTIME_QUANTUM_L7  	= 0x27,
+	VOW_DRR_AIRTIME_QUANTUM_ALL 	= 0x28,
+	VOW_DRR_STA_PAUSE_SETTING       = 0x30,
+};
+
+struct mt7915_vow_sta_cfg{
+	u8 dwrr_quantum[IEEE80211_NUM_ACS];
+	u8 ac_change_rule;
+	bool paused;
+};
+
+struct mt7915_vow_cfg{
+	/*ATF setting */
+	u32  vow_feature;
+	bool vow_atf_en;
+	u8   refill_period;
+	u8   sta_max_wait_time;
+	u8   vow_sta_dwrr_quantum[VOW_MAX_STA_DWRR_NUM];
+	u8   vow_show_en;
+	u32  vow_show_sta;
+
+	/*WATF setting */
+	bool	vow_watf_en;
+};
+
+
 struct mt7915_sta {
 	struct mt76_wcid wcid; /* must be first */
 
@@ -148,6 +200,7 @@ struct mt7915_sta {
 		u8 flowid_mask;
 		struct mt7915_twt_flow flow[MT7915_MAX_STA_TWT_AGRT];
 	} twt;
+	struct mt7915_vow_sta_cfg vow_sta_cfg;
 };
 
 struct mt7915_vif_cap {
@@ -461,6 +514,8 @@ struct mt7915_dev {
 	} dbg;
 	const struct mt7915_dbg_reg_desc *dbg_reg;
 #endif
+	struct delayed_work vow_work;
+	struct mt7915_vow_cfg vow_cfg;
 };
 
 enum {
@@ -492,6 +547,15 @@ enum mt7915_rdd_cmd {
 	RDD_RESUME_BF,
 	RDD_IRQ_OFF,
 };
+
+static inline bool
+mt7915_is_atf_default_on(struct wiphy *wiphy, struct mt7915_dev *dev)
+{
+	return ((!wiphy_ext_feature_isset(wiphy,
+                NL80211_EXT_FEATURE_AIRTIME_FAIRNESS)) ||
+                mtk_wed_device_active(&dev->mt76.mmio.wed));
+}
+
 
 static inline struct mt7915_phy *
 mt7915_hw_phy(struct ieee80211_hw *hw)
@@ -621,6 +685,10 @@ int mt7915_mcu_set_mac(struct mt7915_dev *dev, int band, bool enable,
 int mt7915_mcu_set_test_param(struct mt7915_dev *dev, u8 param, bool test_mode,
 			      u8 en);
 int mt7915_mcu_set_ser(struct mt7915_dev *dev, u8 action, u8 set, u8 band);
+int mt7915_mcu_set_vow_drr_ctrl(struct mt7915_dev *dev, struct mt7915_sta *msta,
+                                u32 subcmd);
+int mt7915_mcu_set_vow_feature_ctrl(struct mt7915_dev *dev);
+int mt7915_mcu_set_vow_band(struct mt7915_dev *dev, struct mt7915_vif *mvif);
 int mt7915_mcu_set_sku_en(struct mt7915_phy *phy, bool enable);
 int mt7915_mcu_set_txpower_sku(struct mt7915_phy *phy);
 int mt7915_mcu_get_txpower_sku(struct mt7915_phy *phy, s8 *txpower, int len,
