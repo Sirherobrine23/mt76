@@ -209,6 +209,7 @@ int mt7915_init_vif(struct mt7915_phy *phy, struct ieee80211_vif *vif, bool bf_e
 {
 	struct mt7915_vif *mvif = (struct mt7915_vif *)vif->drv_priv;
 	struct mt7915_dev *dev = phy->dev;
+	struct wiphy *wiphy = dev->phy.mt76->hw->wiphy;
 	struct mt76_txq *mtxq;
 	bool ext_phy = phy != &dev->phy;
 	int idx, ret = 0;
@@ -269,6 +270,9 @@ int mt7915_init_vif(struct mt7915_phy *phy, struct ieee80211_vif *vif, bool bf_e
 	mt7915_mcu_add_bss_info(phy, vif, true);
 	mt7915_mcu_add_sta(dev, vif, NULL, true);
 	rcu_assign_pointer(dev->mt76.wcid[idx], &mvif->sta.wcid);
+
+	if (mt7915_is_atf_default_on(wiphy, dev))
+		mt7915_mcu_set_vow_band(dev, mvif);
 
 	return ret;
 }
@@ -690,6 +694,7 @@ int mt7915_mac_sta_add(struct mt76_dev *mdev, struct ieee80211_vif *vif,
 	struct mt7915_sta *msta = (struct mt7915_sta *)sta->drv_priv;
 	struct mt7915_vif *mvif = (struct mt7915_vif *)vif->drv_priv;
 	bool ext_phy = mvif->phy != &dev->phy;
+	struct wiphy *wiphy = dev->phy.mt76->hw->wiphy;
 #ifdef CONFIG_MTK_VENDOR
 	struct mt7915_phy *phy;
 #endif
@@ -741,6 +746,16 @@ int mt7915_mac_sta_add(struct mt76_dev *mdev, struct ieee80211_vif *vif,
 		mt7915_mcu_set_mimo(phy, 0);
 	}
 #endif
+	if (mt7915_is_atf_default_on(wiphy, dev)) {
+		msta->vow_sta_cfg.dwrr_quantum[IEEE80211_AC_VO] = 2;
+		msta->vow_sta_cfg.dwrr_quantum[IEEE80211_AC_VI] = 2;
+		msta->vow_sta_cfg.dwrr_quantum[IEEE80211_AC_BE] = 1;
+		msta->vow_sta_cfg.dwrr_quantum[IEEE80211_AC_BK] = 0;
+		mt7915_mcu_set_vow_drr_ctrl(dev, msta, VOW_DRR_STA_BSS_GROUP);
+		mt7915_mcu_set_vow_drr_ctrl(dev, msta, VOW_DRR_STA_PAUSE_SETTING);
+		mt7915_mcu_set_vow_drr_ctrl(dev, msta, VOW_DRR_STA_ALL);
+	}
+
 	return 0;
 }
 
