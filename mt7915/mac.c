@@ -896,6 +896,18 @@ u32 mt7915_wed_init_buf(void *ptr, dma_addr_t phys, int token_id)
 	return MT_TXD_TXP_BUF_SIZE;
 }
 
+void mt7915_wed_trigger_ser(struct mtk_wed_device *wed)
+{
+	struct mt7915_dev *dev;
+	u8 band_idx;
+	dev = container_of(wed, struct mt7915_dev, mt76.mmio.wed);
+	band_idx = dev->phy.mt76->band_idx;
+
+	mt7915_mcu_set_ser(dev, SER_RECOVER, 1, band_idx);
+
+	return;
+}
+
 static void
 mt7915_tx_check_aggr(struct ieee80211_sta *sta, __le32 *txwi)
 {
@@ -1634,6 +1646,12 @@ void mt7915_mac_reset_work(struct work_struct *work)
 	/* chip partial reset */
 	if (!(READ_ONCE(dev->recovery.state) & MT_MCU_CMD_STOP_DMA))
 		return;
+
+	if (mtk_wed_device_active(&dev->mt76.mmio.wed)) {
+		mtk_wed_device_stop(&dev->mt76.mmio.wed, true);
+		if (!is_mt7986(&dev->mt76))
+			mt76_wr(dev, MT_INT_WED_MASK_CSR, 0);
+	}
 
 	ieee80211_stop_queues(mt76_hw(dev));
 	if (ext_phy)
