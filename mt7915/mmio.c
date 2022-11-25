@@ -11,7 +11,7 @@
 #include "../trace.h"
 #include "../dma.h"
 
-static bool wed_enable;
+static bool wed_enable = true;
 module_param(wed_enable, bool, 0644);
 MODULE_PARM_DESC(wed_enable, "Enable Wireless Ethernet Dispatch support");
 
@@ -582,7 +582,7 @@ static void mt7915_mmio_wed_offload_disable(struct mtk_wed_device *wed)
 	dev = container_of(wed, struct mt7915_dev, mt76.mmio.wed);
 
 	spin_lock_bh(&dev->mt76.token_lock);
-	dev->mt76.token_size = MT7915_TOKEN_SIZE;
+	dev->mt76.token_size = wed->wlan.token_start;//MT7915_TOKEN_SIZE
 	spin_unlock_bh(&dev->mt76.token_lock);
 
 	/* MT_TXD5_TX_STATUS_HOST (MPDU format) has higher priority than
@@ -792,6 +792,7 @@ int mt7915_mmio_wed_init(struct mt7915_dev *dev, void *pdev_ptr,
 
 	*irq = wed->irq;
 	dev->mt76.dma_dev = wed->dev;
+	dev->mt76.token_size = wed->wlan.token_start;
 
 	ret = dma_set_mask(wed->dev, DMA_BIT_MASK(32));
 	if (ret)
