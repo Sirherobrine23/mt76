@@ -420,6 +420,15 @@ mt76_dma_get_buf(struct mt76_dev *dev, struct mt76_queue *q, int idx,
 
 			*drop = !!(ctrl & (MT_DMA_CTL_TO_HOST_A |
 					   MT_DMA_CTL_DROP));
+
+			if (*more || (q->flags & MT_QFLAG_WED_FRAG)) {
+				*drop = true;
+
+				if (!(*more) && FIELD_GET(MT_DMA_CTL_WO, desc->buf1))
+					q->flags &= ~MT_QFLAG_WED_FRAG;
+				else
+					q->flags |= MT_QFLAG_WED_FRAG;
+			}
 		}
 	} else {
 		buf = e->buf;
