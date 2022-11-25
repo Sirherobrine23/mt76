@@ -619,6 +619,8 @@ static void mt7915_mmio_wed_release_rx_buf(struct mtk_wed_device *wed)
 		mt76_put_rxwi(&dev->mt76, t);
 	}
 
+	mt76_free_pending_rxwi(&dev->mt76);
+
 	if (!wed->rx_buf_ring.rx_page.va)
 		return;
 
@@ -784,6 +786,7 @@ int mt7915_mmio_wed_init(struct mt7915_dev *dev, void *pdev_ptr,
 	wed->wlan.init_rx_buf = mt7915_mmio_wed_init_rx_buf;
 	wed->wlan.release_rx_buf = mt7915_mmio_wed_release_rx_buf;
 	wed->wlan.update_wo_rx_stats = mt7915_mmio_wed_update_rx_stats;
+	wed->wlan.ser_trigger = mt7915_wed_trigger_ser;
 
 	dev->mt76.rx_token_size = wed->wlan.rx_npkt;
 

@@ -554,6 +554,7 @@ void mt7915_wfsys_reset(struct mt7915_dev *dev);
 irqreturn_t mt7915_irq_handler(int irq, void *dev_instance);
 u64 __mt7915_get_tsf(struct ieee80211_hw *hw, struct mt7915_vif *mvif);
 u32 mt7915_wed_init_buf(void *ptr, dma_addr_t phys, int token_id);
+void mt7915_wed_trigger_ser(struct mtk_wed_device *wed);
 
 int mt7915_register_device(struct mt7915_dev *dev);
 void mt7915_unregister_device(struct mt7915_dev *dev);

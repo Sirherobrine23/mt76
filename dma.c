@@ -165,7 +165,7 @@ mt76_free_pending_txwi(struct mt76_dev *dev)
 	local_bh_enable();
 }
 
-static void
+void
 mt76_free_pending_rxwi(struct mt76_dev *dev)
 {
 	struct mt76_txwi_cache *t;
@@ -178,6 +178,7 @@ mt76_free_pending_rxwi(struct mt76_dev *dev)
 	}
 	local_bh_enable();
 }
+EXPORT_SYMBOL_GPL(mt76_free_pending_rxwi);
 
 static void
 mt76_dma_sync_idx(struct mt76_dev *dev, struct mt76_queue *q)
@@ -618,14 +619,18 @@ mt76_dma_rx_fill(struct mt76_dev *dev, struct mt76_queue *q)
 	return frames;
 }
 
-static int
-mt76_dma_wed_setup(struct mt76_dev *dev, struct mt76_queue *q)
+int
+mt76_dma_wed_setup(struct mt76_dev *dev, struct mt76_queue *q, bool reset)
 {
 #ifdef CONFIG_NET_MEDIATEK_SOC_WED
 	struct mtk_wed_device *wed = &dev->mmio.wed;
 	int ret, type, ring;
-	u8 flags = q->flags;
+	u8 flags;
 
+	if (!q || !q->ndesc)
+		return -EINVAL;
+
+	flags = q->flags;
 	if (!mtk_wed_device_active(wed))
 		q->flags &= ~MT_QFLAG_WED;
 
@@ -637,7 +642,7 @@ mt76_dma_wed_setup(struct mt76_dev *dev, struct mt76_queue *q)
 
 	switch (type) {
 	case MT76_WED_Q_TX:
-		ret = mtk_wed_device_tx_ring_setup(wed, ring, q->regs);
+		ret = mtk_wed_device_tx_ring_setup(wed, ring, q->regs, reset);
 		if (!ret)
 			q->wed_regs = wed->tx_ring[ring].reg_base;
 		break;
@@ -653,7 +658,7 @@ mt76_dma_wed_setup(struct mt76_dev *dev, struct mt76_queue *q)
 			q->wed_regs = wed->txfree_ring.reg_base;
 		break;
 	case MT76_WED_Q_RX:
-		ret = mtk_wed_device_rx_ring_setup(wed, ring, q->regs);
+		ret = mtk_wed_device_rx_ring_setup(wed, ring, q->regs, reset);
 		if (!ret)
 			q->wed_regs = wed->rx_ring[ring].reg_base;
 		break;
@@ -666,6 +671,7 @@ mt76_dma_wed_setup(struct mt76_dev *dev, struct mt76_queue *q)
 	return 0;
 #endif
 }
+EXPORT_SYMBOL_GPL(mt76_dma_wed_setup);
 
 static int
 mt76_dma_alloc_queue(struct mt76_dev *dev, struct mt76_queue *q,
@@ -692,7 +698,7 @@ mt76_dma_alloc_queue(struct mt76_dev *dev, struct mt76_queue *q,
 	if (!q->entry)
 		return -ENOMEM;
 
-	ret = mt76_dma_wed_setup(dev, q);
+	ret = mt76_dma_wed_setup(dev, q, false);
 	if (ret)
 		return ret;
 
@@ -743,8 +749,13 @@ mt76_dma_rx_reset(struct mt76_dev *dev, enum mt76_rxq_id qid)
 		q->desc[i].ctrl = cpu_to_le32(MT_DMA_CTL_DMA_DONE);
 
 	mt76_dma_rx_cleanup(dev, q);
-	mt76_dma_sync_idx(dev, q);
-	mt76_dma_rx_fill(dev, q);
+
+	mt76_dma_wed_setup(dev, q, true);
+
+	if (q->flags != MT_WED_Q_TXFREE) {
+		mt76_dma_sync_idx(dev, q);
+		mt76_dma_rx_fill(dev, q);
+	}
 
 	if (!q->rx_head)
 		return;
