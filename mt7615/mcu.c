@@ -353,7 +353,7 @@ out:
 static void
 mt7615_mcu_csa_finish(void *priv, u8 *mac, struct ieee80211_vif *vif)
 {
-	if (vif->bss_conf.csa_active)
+	if (vif->csa_active)
 		ieee80211_csa_finish(vif);
 }
 
@@ -699,7 +699,7 @@ mt7615_mcu_add_beacon_offload(struct mt7615_dev *dev,
 	if (!enable)
 		goto out;
 
-	skb = ieee80211_beacon_get_template(hw, vif, &offs, 0);
+	skb = ieee80211_beacon_get_template(hw, vif, &offs);
 	if (!skb)
 		return -EINVAL;
 
@@ -1074,7 +1074,7 @@ mt7615_mcu_uni_add_beacon_offload(struct mt7615_dev *dev,
 	if (!enable)
 		goto out;
 
-	skb = ieee80211_beacon_get_template(mt76_hw(dev), vif, &offs, 0);
+	skb = ieee80211_beacon_get_template(mt76_hw(dev), vif, &offs);
 	if (!skb)
 		return -EINVAL;
 
@@ -2526,7 +2526,7 @@ int mt7615_mcu_set_bss_pm(struct mt7615_dev *dev, struct ieee80211_vif *vif,
 		u8 pad;
 	} req = {
 		.bss_idx = mvif->mt76.idx,
-		.aid = cpu_to_le16(vif->cfg.aid),
+		.aid = cpu_to_le16(vif->bss_conf.aid),
 		.dtim_period = vif->bss_conf.dtim_period,
 		.bcn_interval = cpu_to_le16(vif->bss_conf.beacon_int),
 	};
