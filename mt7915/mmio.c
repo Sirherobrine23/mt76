@@ -621,12 +621,27 @@ static void mt7915_mmio_wed_release_rx_buf(struct mtk_wed_device *wed)
 
 	mt76_free_pending_rxwi(&dev->mt76);
 
+	mt76_for_each_q_rx(&dev->mt76, i) {
+		if (FIELD_GET(MT_QFLAG_WED_TYPE,
+			      dev->mt76.q_rx[i].flags) == MT76_WED_Q_RX) {
+			struct mt76_queue *q = &dev->mt76.q_rx[i];
+
+			if (!q->rx_page.va)
+				continue;
+
+			page = virt_to_page(q->rx_page.va);
+			__page_frag_cache_drain(page, q->rx_page.pagecnt_bias);
+			memset(&q->rx_page, 0, sizeof(q->rx_page));
+		}
+	}
+
 	if (!wed->rx_buf_ring.rx_page.va)
 		return;
 
 	page = virt_to_page(wed->rx_buf_ring.rx_page.va);
 	__page_frag_cache_drain(page, wed->rx_buf_ring.rx_page.pagecnt_bias);
 	memset(&wed->rx_buf_ring.rx_page, 0, sizeof(wed->rx_buf_ring.rx_page));
+
 }
 
 static u32 mt7915_mmio_wed_init_rx_buf(struct mtk_wed_device *wed, int size)

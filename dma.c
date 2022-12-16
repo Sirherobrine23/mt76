@@ -633,9 +633,11 @@ mt76_dma_rx_fill(struct mt76_dev *dev, struct mt76_queue *q)
 		qbuf.len = len - offset;
 		qbuf.skip_unmap = false;
 		if (mt76_dma_add_buf(dev, q, &qbuf, 1, 0, buf, NULL, r) < 0) {
+			mt76_put_rxwi(dev, r);
 			dma_unmap_single(dev->dma_dev, addr, len,
 					 DMA_FROM_DEVICE);
-			skb_free_frag(buf);
+			if (!skip_alloc)
+				skb_free_frag(buf);
 			break;
 		}
 		frames++;
@@ -758,12 +760,14 @@ mt76_dma_rx_cleanup(struct mt76_dev *dev, struct mt76_queue *q)
 	} while (1);
 	spin_unlock_bh(&q->lock);
 
-	if (!q->rx_page.va)
-		return;
+	if (FIELD_GET(MT_QFLAG_WED_TYPE, q->flags) != MT76_WED_Q_RX) {
+		if (!q->rx_page.va)
+			return;
 
-	page = virt_to_page(q->rx_page.va);
-	__page_frag_cache_drain(page, q->rx_page.pagecnt_bias);
-	memset(&q->rx_page, 0, sizeof(q->rx_page));
+		page = virt_to_page(q->rx_page.va);
+		__page_frag_cache_drain(page, q->rx_page.pagecnt_bias);
+		memset(&q->rx_page, 0, sizeof(q->rx_page));
+	}
 }
 
 static void
