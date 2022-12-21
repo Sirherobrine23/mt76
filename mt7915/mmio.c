@@ -605,18 +605,18 @@ static void mt7915_mmio_wed_release_rx_buf(struct mtk_wed_device *wed)
 
 	dev = container_of(wed, struct mt7915_dev, mt76.mmio.wed);
 	for (i = 0; i < dev->mt76.rx_token_size; i++) {
-		struct mt76_txwi_cache *t;
+		struct mt76_rxwi_cache *r;
 
-		t = mt76_rx_token_release(&dev->mt76, i);
-		if (!t || !t->ptr)
+		r = mt76_rx_token_release(&dev->mt76, i);
+		if (!r || !r->ptr)
 			continue;
 
-		dma_unmap_single(dev->mt76.dma_dev, t->dma_addr,
+		dma_unmap_single(dev->mt76.dma_dev, r->dma_addr,
 				 wed->wlan.rx_size, DMA_FROM_DEVICE);
-		skb_free_frag(t->ptr);
-		t->ptr = NULL;
+		skb_free_frag(r->ptr);
+		r->ptr = NULL;
 
-		mt76_put_rxwi(&dev->mt76, t);
+		mt76_put_rxwi(&dev->mt76, r);
 	}
 
 	mt76_free_pending_rxwi(&dev->mt76);
@@ -641,7 +641,7 @@ static u32 mt7915_mmio_wed_init_rx_buf(struct mtk_wed_device *wed, int size)
 				sizeof(struct skb_shared_info));
 
 	for (i = 0; i < size; i++) {
-		struct mt76_txwi_cache *t = mt76_get_rxwi(&dev->mt76);
+		struct mt76_rxwi_cache *r = mt76_get_rxwi(&dev->mt76);
 		dma_addr_t phy_addr;
 		int token;
 		void *ptr;
@@ -660,7 +660,7 @@ static u32 mt7915_mmio_wed_init_rx_buf(struct mtk_wed_device *wed, int size)
 		}
 
 		desc->buf0 = cpu_to_le32(phy_addr);
-		token = mt76_rx_token_consume(&dev->mt76, ptr, t, phy_addr);
+		token = mt76_rx_token_consume(&dev->mt76, ptr, r, phy_addr);
 		if (token < 0) {
 			dma_unmap_single(dev->mt76.dma_dev, phy_addr,
 					 wed->wlan.rx_size, DMA_TO_DEVICE);
@@ -788,7 +788,7 @@ int mt7915_mmio_wed_init(struct mt7915_dev *dev, void *pdev_ptr,
 	wed->wlan.update_wo_rx_stats = mt7915_mmio_wed_update_rx_stats;
 	wed->wlan.ser_trigger = mt7915_wed_trigger_ser;
 
-	dev->mt76.rx_token_size = wed->wlan.rx_npkt;
+	dev->mt76.rx_token_size += wed->wlan.rx_npkt;
 
 	if (mtk_wed_device_attach(wed))
 		return 0;
@@ -994,6 +994,7 @@ struct mt7915_dev *mt7915_mmio_probe(struct device *pdev,
 				SURVEY_INFO_TIME_RX |
 				SURVEY_INFO_TIME_BSS_RX,
 		.token_size = MT7915_TOKEN_SIZE,
+		.rx_token_size = MT7915_RX_TOKEN_SIZE,
 		.tx_prepare_skb = mt7915_tx_prepare_skb,
 		.tx_complete_skb = mt76_connac_tx_complete_skb,
 		.rx_skb = mt7915_queue_rx_skb,

@@ -492,7 +492,6 @@ int mt7915_dma_init(struct mt7915_dev *dev, struct mt7915_phy *phy2)
 		    mtk_wed_get_rx_capa(&mdev->mmio.wed)) {
 			dev->mt76.q_rx[MT_RXQ_MAIN].flags =
 				MT_WED_Q_RX(MT7915_RXQ_BAND0);
-			dev->mt76.rx_token_size += MT7915_RX_RING_SIZE;
 		}
 
 		ret = mt76_queue_alloc(dev, &dev->mt76.q_rx[MT_RXQ_MAIN],
@@ -529,7 +528,6 @@ int mt7915_dma_init(struct mt7915_dev *dev, struct mt7915_phy *phy2)
 		    mtk_wed_get_rx_capa(&mdev->mmio.wed)) {
 			dev->mt76.q_rx[MT_RXQ_BAND1].flags =
 				MT_WED_Q_RX(MT7915_RXQ_BAND1);
-			dev->mt76.rx_token_size += MT7915_RX_RING_SIZE;
 		}
 
 		/* rx data queue for band1 */
