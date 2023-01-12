@@ -1982,6 +1982,7 @@ mt7915_mcu_beacon_check_caps(struct mt7915_phy *phy, struct ieee80211_vif *vif,
 		he = (void *)(ie + 3);
 
 		vc->he_ldpc =
+			HE_PHY(CAP1_LDPC_CODING_IN_PAYLOAD, he->phy_cap_info[1]) &&
 			HE_PHY(CAP1_LDPC_CODING_IN_PAYLOAD, pe->phy_cap_info[1]);
 		vc->he_su_ebfer =
 			HE_PHY(CAP3_SU_BEAMFORMER, he->phy_cap_info[3]) &&
