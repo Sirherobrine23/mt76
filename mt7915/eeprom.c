@@ -155,13 +155,13 @@ static int mt7915_eeprom_load(struct mt7915_dev *dev)
 	u16 eeprom_size = mt7915_eeprom_size(dev);
 
 #ifndef CONFIG_BB_SOC
-	ret = mt76_eeprom_init(&dev->mt76, MT7915_EEPROM_SIZE);	
+	ret = mt76_eeprom_init(&dev->mt76, eeprom_size);
 	if (ret < 0)
 		return ret;
 
 	if (ret) 
 #else
-	ret = bbsoc_load_eeprom_from_bin(&dev->mt76, MT7915_EEPROM_SIZE, dev->dbdc_support);
+	ret = bbsoc_load_eeprom_from_bin(&dev->mt76, eeprom_size, dev->dbdc_support);
 
 	if (ret == 0)
 #endif

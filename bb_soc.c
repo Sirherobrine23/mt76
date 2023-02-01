@@ -20,10 +20,13 @@
 
 #include "mt76.h"
 
-//set the file path to be the same as Linux driver
-//maybe one day mt76+mac80211.ko is porting to tclinux
-#define BIN_FILE_PATH			"/etc/Wireless/RT2860AP_AC/RT30xxEEPROM.bin"
-#define BIN_FILE_PATH_2G		"/etc/RT30xxEEPROM.bin"
+/* default eeprom path */
+#define FW_DIR				"/lib/firmware/"
+#define MT7915A_DEFAULT_EEPROM		FW_DIR "mediatek/mt7915_eeprom.bin"
+#define MT7915A_DEFAULT_EEPROM_2G	FW_DIR "mediatek/mt7915_eeprom_2g.bin"
+#define MT7915D_DEFAULT_EEPROM		FW_DIR "mediatek/mt7915_eeprom_dbdc.bin"
+#define MT7916D_DEFAULT_EEPROM		FW_DIR "mediatek/mt7916_eeprom.bin"
+
 #define FILE_OPEN_ERR(_fd)		((_fd == NULL) || IS_ERR((_fd)))
 
 static bool glb_eeprom_has_read_once = false;
@@ -58,24 +61,22 @@ static int bbsoc_file_read(struct file *fp, char *eeprom_data, int len)
 /*
  * Implementation for reading eeprom from bin file instead of using mtd_read
  */
+#define MT7916D_IPAILNA_path		FW_DIR "mediatek/mt7916d_IPAILNA_eeprom.bin"
+#define MT7915D_IPAILNA_path		FW_DIR "mediatek/mt7915d_IPAILNA_eeprom.bin"
+#define MT7915A_BAND0_IPAILNA_path	FW_DIR "mediatek/mt7915a_IPAILNA_eeprom_2g.bin"
+#define MT7915A_BAND1_IPAILNA_path	FW_DIR "mediatek/mt7915a_IPAILNA_eeprom.bin"
 
-#define MT7916D_IPAILNA_path "/etc/Wireless/RT2860AP_AC/MT7916D_iPAiLNA.bin"
-#define MT7915D_IPAILNA_path "/etc/Wireless/RT2860AP_AC/MT7915D_iPAiLNA.bin"
-#define MT7915A_BAND0_IPAILNA_path "/etc/MT7915A_band0_iPAiLNA.bin"
-#define MT7915A_BAND1_IPAILNA_path "/etc/Wireless/RT2860AP_AC/MT7915A_band1_iPAiLNA.bin"
+#define MT7915D_IPAELNA_path		FW_DIR "mediatek/mt7915d_IPAELNA_eeprom.bin"
+#define MT7915A_BAND0_IPAELNA_path	FW_DIR "mediatek/mt7915a_IPAELNA_eeprom_2g.bin"
+#define MT7915A_BAND1_IPAELNA_path	FW_DIR "mediatek/mt7915a_IPAELNA_eeprom.bin"
 
+#define MT7916D_EPAELNA_path		FW_DIR "mediatek/mt7916d_EPAELNA_eeprom.bin"
+#define MT7915D_EPAELNA_path		FW_DIR "mediatek/mt7915d_EPAELNA_eeprom.bin"
+#define MT7915A_BAND0_EPAELNA_path	FW_DIR "mediatek/mt7915a_EPAELNA_eeprom_2g.bin"
+#define MT7915A_BAND1_EPAELNA_path	FW_DIR "mediatek/mt7915a_EPAELNA_eeprom.bin"
 
-#define MT7915D_IPAELNA_path "/etc/Wireless/RT2860AP_AC/MT7915D_IPAELNA.bin"
-#define MT7915A_BAND0_IPAELNA_path "/etc/MT7915A_band0_IPAELNA.bin"
-#define MT7915A_BAND1_IPAELNA_path "/etc/Wireless/RT2860AP_AC/MT7915A_band1_IPAELNA.bin"
-
-#define MT7916D_EPAELNA_path "/etc/Wireless/RT2860AP_AC/MT7916D_EPAELNA.bin"
-#define MT7915D_EPAELNA_path "/etc/Wireless/RT2860AP_AC/MT7915D_EPAELNA.bin"
-#define MT7915A_BAND0_EPAELNA_path "/etc/MT7915A_band0_EPAELNA.bin"
-#define MT7915A_BAND1_EPAELNA_path "/etc/Wireless/RT2860AP_AC/MT7915A_band1_EPAELNA.bin"
-
-#define MT7915A_BAND0_EPAILNA_path "/etc/MT7915A_band0_EPAILNA.bin"
-#define MT7915A_BAND1_EPAILNA_path "/etc/Wireless/RT2860AP_AC/MT7915A_band1_iPAiLNA.bin"
+#define MT7915A_BAND0_EPAILNA_path	FW_DIR "mediatek/mt7915a_EPAILNA_eeprom_2g.bin"
+#define MT7915A_BAND1_EPAILNA_path	FW_DIR "mediatek/mt7915a_EPAILNA_eeprom.bin"
 
 static char wifi_chip_type[32]={0};
 static inline bool is_mt7915(struct mt76_dev *dev)
@@ -163,7 +164,8 @@ int bbsoc_load_eeprom_from_bin(struct mt76_dev *dev, int len, bool is_dbdc)
 	chip_type_check();
 	if(is_dbdc){
 		if(band_calibrated(1))
-			snprintf(file_path, 100, "%s", BIN_FILE_PATH);
+			snprintf(file_path, 100, "%s", is_mt7916(dev) ?
+				MT7916D_DEFAULT_EEPROM : MT7915D_DEFAULT_EEPROM);
 		else{
 			if(!is_mt7915(dev) && !(is_mt7916(dev)))
 			{
@@ -196,7 +198,8 @@ int bbsoc_load_eeprom_from_bin(struct mt76_dev *dev, int len, bool is_dbdc)
 			}
 			else{
 				printk("%s:%d use default!!!\n",__func__,__LINE__);
-				snprintf(file_path, 100, "%s", BIN_FILE_PATH);			
+				snprintf(file_path, 100, "%s", is_mt7916(dev) ?
+					MT7916D_DEFAULT_EEPROM : MT7915D_DEFAULT_EEPROM);
 			}
 		}
 	}
@@ -208,7 +211,7 @@ int bbsoc_load_eeprom_from_bin(struct mt76_dev *dev, int len, bool is_dbdc)
 		}
 		if(glb_eeprom_has_read_once){
 			if(band_calibrated(1))
-				snprintf(file_path, 100, "%s", BIN_FILE_PATH);
+				snprintf(file_path, 100, "%s", MT7915A_DEFAULT_EEPROM);
 			else{
 				if(strstr(wifi_chip_type,"IPAILNA"))
 					snprintf(file_path, 100, "%s", MT7915A_BAND1_IPAILNA_path);
@@ -221,14 +224,14 @@ int bbsoc_load_eeprom_from_bin(struct mt76_dev *dev, int len, bool is_dbdc)
 				else
 				{
 					printk("%s:%d use default !!!\n",__func__,__LINE__);
-					snprintf(file_path, 100, "%s", BIN_FILE_PATH);
+					snprintf(file_path, 100, "%s", MT7915A_DEFAULT_EEPROM);
 				}
 			}
 		}
 		else{
 			glb_eeprom_has_read_once = true;
 			if(band_calibrated(0))
-				snprintf(file_path, 100, "%s", BIN_FILE_PATH_2G);
+				snprintf(file_path, 100, "%s", MT7915A_DEFAULT_EEPROM_2G);
 			else{
 				if(strstr(wifi_chip_type,"IPAILNA"))
 					snprintf(file_path, 100, "%s", MT7915A_BAND0_IPAILNA_path);
@@ -241,7 +244,7 @@ int bbsoc_load_eeprom_from_bin(struct mt76_dev *dev, int len, bool is_dbdc)
 				else
 				{
 					printk("%s:%d use default !!!\n",__func__,__LINE__);
-					snprintf(file_path, 100, "%s", BIN_FILE_PATH_2G);
+					snprintf(file_path, 100, "%s", MT7915A_DEFAULT_EEPROM_2G);
 				}
 			}
 		}
