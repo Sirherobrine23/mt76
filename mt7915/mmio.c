@@ -24,6 +24,18 @@ struct mt7915_dev *MT7915_5G;
 
 #endif
 
+#ifdef CONFIG_SOC_WOE
+static int woe = -1;
+module_param(woe, int, 0444);
+MODULE_PARM_DESC(woe, "woe tx acceleration (-1=auto, 0=disable, 1=enamble)");
+#endif
+
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD
+static int npu = -1;
+module_param(npu, int, 0444);
+MODULE_PARM_DESC(npu, "npu rx acceleration (-1=auto, 0=disable, 1=enamble)");
+#endif
+
 static bool wed_enable = true;
 module_param(wed_enable, bool, 0644);
 MODULE_PARM_DESC(wed_enable, "Enable Wireless Ethernet Dispatch support");
@@ -1108,8 +1120,6 @@ irqreturn_t mt7915_irq_handler(int irq, void *dev_instance)
 	return IRQ_HANDLED;
 }
 
-#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD
-
 static bool mt7915_band_config_1(struct mt7915_dev *dev)
 {
 	bool ret = true;
@@ -1118,6 +1128,8 @@ static bool mt7915_band_config_1(struct mt7915_dev *dev)
 		    !!(mt76_rr(dev, MT_HW_BOUND) & BIT(5)) : true;
 	return ret;
 }
+
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD
 struct mt7915_dev *mt7915_mmio_probe(struct device *pdev,
 				     void __iomem *mem_base, u32 device_id,struct pci_dev *pci_dev)
 #else
@@ -1163,13 +1175,43 @@ struct mt7915_dev *mt7915_mmio_probe(struct device *pdev,
 	if (ret)
 		goto error;
 
+	dev_dbdc = mt7915_band_config_1(dev);
+#ifdef CONFIG_SOC_WOE
+	if (woe == -1) {
+		woe = 1;
+	}
+	set_woe_enable(woe);
+	printk("mt7915e: woe=%d\n", woe);
+#endif
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD
+	if (npu == -1) {
+		switch (device_id) {
+		    case 0x7915:
+			if (!dev_dbdc) {
+				// mt7915a
+				npu = 1;
+			} else {
+				// mt7915d
+				npu = 1;
+			}
+			break;
+		    default:
+			npu = 1;
+			break;
+		}
+	}
+	set_npu_enable(npu);
+	printk("mt7915e: npu=%d\n", npu);
+#endif
+
 	tasklet_setup(&dev->irq_tasklet, mt7915_irq_tasklet);
+ 
 #ifdef TCSUPPORT_NPU_WIFI_OFFLOAD	
 	if (pci_dev->bus)
 		band = (pci_dev->bus->self->devfn >> 3) & 0x1f;
 	else
 		band = 1;
-	dev_dbdc = mt7915_band_config_1(dev);
+
 	if(npu_enable()){	
 		if(dev_dbdc)
 		{
