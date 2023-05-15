@@ -128,6 +128,7 @@ static int band_calibrated(int band)
 	filp_r = filp_open(file_path, O_RDONLY, 0);	
 	if(FILE_OPEN_ERR(filp_r)){
 		printk("%s:%d open error !!!\n",__func__,__LINE__);
+		set_fs(orgfs);
 		return 0;
 	}	
 	ret = bbsoc_file_read(filp_r, tempStr, 64);
