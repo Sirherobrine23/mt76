@@ -404,6 +404,38 @@ static int mt7915_dma_enable(struct mt7915_dev *dev, bool reset)
 #define MT_WFDMA_WED_DLY_INT_TICK	MT_WFDMA_EXT_CSR_PHYS(0x38)
 #define MT_CBTOP_RESV			0x70010210
 
+void txd_config(struct mt7915_dev *dev)
+{
+	struct mt76_dev *mdev = &dev->mt76;
+	u8 wed_control_rx1 = is_mt7915(mdev) ? 1 : 2;
+	mt76_set(dev, MT_WFDMA_HOST_CONFIG, MT_WFDMA_HOST_CONFIG_WED);
+	mt76_wr(dev, MT_WFDMA_WED_RING_CONTROL,
+		FIELD_PREP(MT_WFDMA_WED_RING_CONTROL_TX0, 18) |
+		FIELD_PREP(MT_WFDMA_WED_RING_CONTROL_TX1, 19) |
+		FIELD_PREP(MT_WFDMA_WED_RING_CONTROL_RX1, wed_control_rx1));
+	if(is_mt7915(mdev))
+		mt76_rmw(dev, MT_WFDMA0_EXT0_CFG, MT_WFDMA0_EXT0_RXWB_KEEP,
+			   MT_WFDMA0_EXT0_RXWB_KEEP);
+		else {
+			if (mt76_rr(dev, MT_CBTOP_RESV) & 0xff == 2) {
+				mt76_set(dev, MT_WFDMA0_GLO_CFG, MT_WFDMA0_GLO_CFG_DUMMY_REG);
+				mt76_set(dev, MT_WFDMA0_CTXD_CFG, FIELD_PREP(MT_WFDMA0_CTXD_TIMEOUT, 0xa));
+			} else {
+				mt76_set(dev, MT_WFDMA0_CTXD_CFG, FIELD_PREP(MT_WFDMA0_CTXD_TIMEOUT, 0xff));
+				mt76_wr(dev, MT_WFDMA_WED_DLY_INT_TICK, 0xffff);
+			}
+
+			mt76_clear(dev, MT_WFDMA0_CTXD_CFG, MT_WFDMA0_CTXD_CASCADE_NUM);
+
+			mt76_set(dev, MT_WFDMA0_CTXD_CFG,
+				FIELD_PREP(MT_WFDMA0_BAND0_CTXD_RING_IDX, 18) |
+				FIELD_PREP(MT_WFDMA0_BAND1_CTXD_RING_IDX, 19) |
+				MT_WFDMA0_BAND0_CTXD_EN | MT_WFDMA0_BAND1_CTXD_EN);
+
+			mt76_set(dev, MT_WFDMA0_CFG_EXT, MT_WFDMA0_EXT_TX_FCTRL_MODE);
+		}		
+}
+
 int mt7915_dma_init(struct mt7915_dev *dev, struct mt7915_phy *phy2)
 {
 	struct mt76_dev *mdev = &dev->mt76;

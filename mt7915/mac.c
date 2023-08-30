@@ -1841,6 +1841,11 @@ void mt7915_mac_reset_work(struct work_struct *work)
 		ieee80211_queue_delayed_work(ext_phy->hw,
 					     &phy2->mt76->mac_work,
 					     MT7915_WATCHDOG_TIME);
+	if(woe_enable())
+	{
+		printk("%s:%d config txd !!!!\n",__func__,__LINE__);
+		txd_config(dev);
+	}					 
 	dev_info(dev->mt76.dev,"%s L1 SER recovery completed.\n",
 		wiphy_name(dev->mt76.hw->wiphy));	
 }
