@@ -32,6 +32,11 @@ enum {
 	MT_LMAC_PSMP0,
 };
 
+enum {
+	MT_TXS_MPDU_FMT = 0,
+	MT_TXS_PPDU_FMT = 2,
+};
+
 #define MT_TXD0_Q_IDX			GENMASK(31, 25)
 #define MT_TXD0_PKT_FMT			GENMASK(24, 23)
 #define MT_TXD0_ETH_TYPE_OFFSET		GENMASK(22, 16)
