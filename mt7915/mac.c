@@ -1749,26 +1749,6 @@ void mt7915_mac_reset_work(struct work_struct *work)
 	dev->mt76.recovery_state = MT76_RECOVERY_PROCESS;
 	dev_info(dev->mt76.dev,"%s L1 SER recovery start.\n",
 		wiphy_name(dev->mt76.hw->wiphy));	
-#if 0
-	if (mtk_wed_device_active(&dev->mt76.mmio.wed)) {
-		mtk_wed_device_stop(&dev->mt76.mmio.wed, true);
-		if (!is_mt7986(&dev->mt76))
-			mt76_wr(dev, MT_INT_WED_MASK_CSR, 0);
-	}
-#else
-	struct mt76_dev *mdev = &dev->mt76;
-#ifdef CONFIG_SOC_WOE
-	if(woe_enable())
-	{
-		if(mdev->slot_id == 0)
-			mt_wlan_hook_call(WLAN_HOOK_WOE_STOP, &pAd, NULL);
-		else
-			mt_wlan_hook_call(WLAN_HOOK_WOE_STOP, &pAd_1, NULL);	
-		if (!is_mt7986(&dev->mt76))
-			mt76_wr(dev, MT_INT_WED_MASK_CSR, 0);		
-	}
-#endif
-#endif
 	ieee80211_stop_queues(mt76_hw(dev));
 	if (ext_phy)
 		ieee80211_stop_queues(ext_phy->hw);
@@ -1784,6 +1764,22 @@ void mt7915_mac_reset_work(struct work_struct *work)
 		napi_disable(&dev->mt76.napi[i]);
 	napi_disable(&dev->mt76.tx_napi);
 
+#if 0
+	if (mtk_wed_device_active(&dev->mt76.mmio.wed)) {
+		mtk_wed_device_stop(&dev->mt76.mmio.wed, true);
+	}
+#else
+	struct mt76_dev *mdev = &dev->mt76;
+#ifdef CONFIG_SOC_WOE
+	if(woe_enable())
+	{
+		if(mdev->slot_id == 0)
+			mt_wlan_hook_call(WLAN_HOOK_WOE_STOP, &pAd, NULL);
+		else
+			mt_wlan_hook_call(WLAN_HOOK_WOE_STOP, &pAd_1, NULL);	
+	}
+#endif
+#endif
 	mt76_wr(dev, MT_MCU_INT_EVENT, MT_MCU_INT_EVENT_DMA_STOPPED);
 
 	if (mt7915_wait_reset_state(dev, MT_MCU_CMD_RESET_DONE)) {

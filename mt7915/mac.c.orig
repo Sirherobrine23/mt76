@@ -181,15 +181,7 @@ static void mt7915_mac_sta_poll(struct mt7915_dev *dev)
 						       rx_cur);
 		}
 
-		/*
-		 * We don't support reading GI info from txs packets.
-		 * For accurate tx status reporting and AQL improvement,
-		 * we need to make sure that flags match so polling GI
-		 * from per-sta counters directly.
-		 */
 		rate = &msta->wcid.rate;
-		addr = mt7915_mac_wtbl_lmac_addr(dev, idx, 7);
-		val = mt76_rr(dev, addr);
 
 		switch (rate->bw) {
 		case RATE_INFO_BW_160:
@@ -204,18 +196,6 @@ static void mt7915_mac_sta_poll(struct mt7915_dev *dev)
 		default:
 			bw = IEEE80211_STA_RX_BW_20;
 			break;
-		}
-
-		if (rate->flags & RATE_INFO_FLAGS_HE_MCS) {
-			u8 offs = 24 + 2 * bw;
-
-			rate->he_gi = (val & (0x3 << offs)) >> offs;
-		} else if (rate->flags &
-			   (RATE_INFO_FLAGS_VHT_MCS | RATE_INFO_FLAGS_MCS)) {
-			if (val & BIT(12 + bw))
-				rate->flags |= RATE_INFO_FLAGS_SHORT_GI;
-			else
-				rate->flags &= ~RATE_INFO_FLAGS_SHORT_GI;
 		}
 
 		/* get signal strength of resp frames (CTS/BA/ACK) */
@@ -557,7 +537,8 @@ mt7915_mac_fill_rx(struct mt7915_dev *dev, struct sk_buff *skb,
 			if (IS_BROADCAST_MAC_ADDR(hdr->addr1))
 			{			
 				msta1=container_of(mt7915_rx_get_wcid(dev, idx, 1), struct mt7915_sta, wcid);
-				msta1->wcid.stats.rx_br++;
+				if (msta1)
+					msta1->wcid.stats.rx_br++;
 
 			    if(msta1 && msta1->vif){
 			       msta1->vif->rx_br_cnt++;
@@ -569,7 +550,8 @@ mt7915_mac_fill_rx(struct mt7915_dev *dev, struct sk_buff *skb,
 
   	 		if(IS_MULTICAST_MAC_ADDR(hdr->addr1)){
 				msta1=container_of(mt7915_rx_get_wcid(dev, idx, 1), struct mt7915_sta, wcid);
-				msta1->wcid.stats.rx_mr++;
+				if (msta1)
+					msta1->wcid.stats.rx_mr++;
 				if(msta){
 					msta->wcid.stats.rx_mr++;
 	       	    }
@@ -886,7 +868,7 @@ int mt7915_tx_prepare_skb(struct mt76_dev *mdev, void *txwi_ptr,
 			      qid, 0);
 #ifdef CONFIG_SOC_WOE 	
 	tx_info_woe.wcid = wcid->idx;
-	if(msta)
+	if(msta && msta->vif)
 		tx_info_woe.ringidx = msta->vif->mt76.band_idx;
 	else
 		tx_info_woe.ringidx = 3;
@@ -945,8 +927,8 @@ int mt7915_tx_prepare_skb(struct mt76_dev *mdev, void *txwi_ptr,
 		txp->rept_wds_wcid = cpu_to_le16(wcid->idx);
 	else
 		txp->rept_wds_wcid = cpu_to_le16(0x3ff);
-	tx_info->skb = DMA_DUMMY_DATA;
-
+	//tx_info->skb = DMA_DUMMY_DATA;
+	tx_info->skb = NULL;
 	/* pass partial skb header to fw */
 	tx_info->buf[1].len = MT_CT_PARSE_LEN;
 	tx_info->buf[1].skip_unmap = true;
@@ -1145,6 +1127,7 @@ mt7915_mac_tx_free(struct mt7915_dev *dev, void *data, int len)
 		info = le32_to_cpu(*cur_info);
 		if (info & MT_TX_FREE_PAIR) {
 			struct mt7915_sta *msta;
+			struct mt7915_phy *phy;
 			u16 idx;
 
 			idx = FIELD_GET(MT_TX_FREE_WLAN_ID, info);
@@ -1154,10 +1137,15 @@ mt7915_mac_tx_free(struct mt7915_dev *dev, void *data, int len)
 				continue;
 
 			msta = container_of(wcid, struct mt7915_sta, wcid);
+			phy = msta->vif->phy;
 			spin_lock_bh(&dev->sta_poll_lock);
 			if (list_empty(&msta->poll_list))
 				list_add_tail(&msta->poll_list, &dev->sta_poll_list);
 			spin_unlock_bh(&dev->sta_poll_lock);
+			spin_lock_bh(&phy->stats_lock);
+			if (list_empty(&msta->stats_list))
+				list_add_tail(&msta->stats_list, &phy->stats_list);
+			spin_unlock_bh(&phy->stats_lock);			
 			continue;
 		}
 
@@ -1229,6 +1217,7 @@ mt7915_mac_tx_free_v0(struct mt7915_dev *dev, void *data, int len)
 static void mt7915_mac_add_txs(struct mt7915_dev *dev, void *data)
 {
 	struct mt7915_sta *msta = NULL;
+	struct mt7915_phy *phy;
 	struct mt76_wcid *wcid;
 	__le32 *txs_data = data;
 	u16 wcidx;
@@ -1263,6 +1252,12 @@ static void mt7915_mac_add_txs(struct mt7915_dev *dev, void *data)
 	if (list_empty(&msta->poll_list))
 		list_add_tail(&msta->poll_list, &dev->sta_poll_list);
 	spin_unlock_bh(&dev->sta_poll_lock);
+
+	phy = msta->vif->phy;
+	spin_lock_bh(&phy->stats_lock);
+	if (list_empty(&msta->stats_list))
+		list_add_tail(&msta->stats_list, &phy->stats_list);
+	spin_unlock_bh(&phy->stats_lock);	
 
 out:
 	rcu_read_unlock();
@@ -1572,14 +1567,6 @@ mt7915_mac_restart(struct mt7915_dev *dev)
 			mt76_wr(dev, MT_PCIE1_MAC_INT_ENABLE, 0x0);
 	}
 
-	set_bit(MT76_RESET, &dev->mphy.state);
-	set_bit(MT76_MCU_RESET, &dev->mphy.state);
-	wake_up(&dev->mt76.mcu.wait);
-	if (ext_phy) {
-		set_bit(MT76_RESET, &ext_phy->state);
-		set_bit(MT76_MCU_RESET, &ext_phy->state);
-	}
-
 	/* lock/unlock all queues to ensure that no tx is pending */
 	mt76_txq_schedule_all(&dev->mphy);
 	if (ext_phy)
@@ -1676,10 +1663,17 @@ mt7915_mac_full_reset(struct mt7915_dev *dev)
 
 	dev->recovery.hw_full_reset = true;
 
-	wake_up(&dev->mt76.mcu.wait);
 	ieee80211_stop_queues(mt76_hw(dev));
 	if (ext_phy)
 		ieee80211_stop_queues(ext_phy->hw);
+
+	set_bit(MT76_RESET, &dev->mphy.state);
+	set_bit(MT76_MCU_RESET, &dev->mphy.state);
+	wake_up(&dev->mt76.mcu.wait);
+	if (ext_phy) {
+		set_bit(MT76_RESET, &ext_phy->state);
+		set_bit(MT76_MCU_RESET, &ext_phy->state);
+	}
 
 	cancel_delayed_work_sync(&dev->mphy.mac_work);
 	if (ext_phy)
@@ -1711,7 +1705,7 @@ mt7915_mac_full_reset(struct mt7915_dev *dev)
 					     &ext_phy->mac_work,
 					     MT7915_WATCHDOG_TIME);
 }
-
+extern void register_rx_data_done_task(struct mt7915_dev *dev, int enable);
 /* system error recovery */
 void mt7915_mac_reset_work(struct work_struct *work)
 {
@@ -1719,7 +1713,6 @@ void mt7915_mac_reset_work(struct work_struct *work)
 	struct mt76_phy *ext_phy;
 	struct mt7915_dev *dev;
 	int i;
-
 	dev = container_of(work, struct mt7915_dev, reset_work);
 	ext_phy = dev->mt76.phys[MT_BAND1];
 	phy2 = ext_phy ? ext_phy->priv : NULL;
@@ -1752,6 +1745,8 @@ void mt7915_mac_reset_work(struct work_struct *work)
 	/* chip partial reset */
 	if (!(READ_ONCE(dev->recovery.state) & MT_MCU_CMD_STOP_DMA))
 		return;
+
+	dev->mt76.recovery_state = MT76_RECOVERY_PROCESS;
 	dev_info(dev->mt76.dev,"%s L1 SER recovery start.\n",
 		wiphy_name(dev->mt76.hw->wiphy));	
 #if 0
@@ -1760,6 +1755,19 @@ void mt7915_mac_reset_work(struct work_struct *work)
 		if (!is_mt7986(&dev->mt76))
 			mt76_wr(dev, MT_INT_WED_MASK_CSR, 0);
 	}
+#else
+	struct mt76_dev *mdev = &dev->mt76;
+#ifdef CONFIG_SOC_WOE
+	if(woe_enable())
+	{
+		if(mdev->slot_id == 0)
+			mt_wlan_hook_call(WLAN_HOOK_WOE_STOP, &pAd, NULL);
+		else
+			mt_wlan_hook_call(WLAN_HOOK_WOE_STOP, &pAd_1, NULL);	
+		if (!is_mt7986(&dev->mt76))
+			mt76_wr(dev, MT_INT_WED_MASK_CSR, 0);		
+	}
+#endif
 #endif
 	ieee80211_stop_queues(mt76_hw(dev));
 	if (ext_phy)
@@ -1767,18 +1775,14 @@ void mt7915_mac_reset_work(struct work_struct *work)
 
 	set_bit(MT76_RESET, &dev->mphy.state);
 	set_bit(MT76_MCU_RESET, &dev->mphy.state);
+	if (ext_phy)
+		set_bit(MT76_RESET, &ext_phy->state);
 	wake_up(&dev->mt76.mcu.wait);
-	cancel_delayed_work_sync(&dev->mphy.mac_work);
-	if (phy2) {
-		set_bit(MT76_RESET, &phy2->mt76->state);
-		cancel_delayed_work_sync(&phy2->mt76->mac_work);
-	}
+
 	mt76_worker_disable(&dev->mt76.tx_worker);
 	mt76_for_each_q_rx(&dev->mt76, i)
 		napi_disable(&dev->mt76.napi[i]);
 	napi_disable(&dev->mt76.tx_napi);
-
-	mutex_lock(&dev->mt76.mutex);
 
 	mt76_wr(dev, MT_MCU_INT_EVENT, MT_MCU_INT_EVENT_DMA_STOPPED);
 
@@ -1795,14 +1799,11 @@ void mt7915_mac_reset_work(struct work_struct *work)
 	mt76_wr(dev, MT_MCU_INT_EVENT, MT_MCU_INT_EVENT_RESET_DONE);
 	mt7915_wait_reset_state(dev, MT_MCU_CMD_NORMAL_STATE);
 	/* enable dma tx/rx and interrupt */
-	//__mt7915_dma_enable(dev, false, false);
-
-
+	__mt7915_dma_enable(dev, false, false);
 	clear_bit(MT76_MCU_RESET, &dev->mphy.state);
 	clear_bit(MT76_RESET, &dev->mphy.state);
-	if (phy2)
-		clear_bit(MT76_RESET, &phy2->mt76->state);
-
+	if (ext_phy)
+		clear_bit(MT76_RESET, &ext_phy->state);
 	local_bh_disable();
 	mt76_for_each_q_rx(&dev->mt76, i) {
 		napi_enable(&dev->mt76.napi[i]);
@@ -1825,17 +1826,20 @@ void mt7915_mac_reset_work(struct work_struct *work)
 	ieee80211_wake_queues(mt76_hw(dev));
 	if (ext_phy)
 		ieee80211_wake_queues(ext_phy->hw);
-
-	mutex_unlock(&dev->mt76.mutex);
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD	
+	if(npu_enable())
+		register_rx_data_done_task(dev, 1);
+#endif
 
 	mt7915_update_beacons(dev);
 
-	ieee80211_queue_delayed_work(mt76_hw(dev), &dev->mphy.mac_work,
-				     MT7915_WATCHDOG_TIME);
-	if (phy2)
-		ieee80211_queue_delayed_work(ext_phy->hw,
-					     &phy2->mt76->mac_work,
-					     MT7915_WATCHDOG_TIME);
+	if(woe_enable())
+	{
+		printk("%s:%d config txd !!!!\n",__func__,__LINE__);
+		txd_config(dev);
+	}					 
+
+	dev->mt76.recovery_state = MT76_RECOVERY_DONE;
 	dev_info(dev->mt76.dev,"%s L1 SER recovery completed.\n",
 		wiphy_name(dev->mt76.hw->wiphy));	
 }
@@ -1932,6 +1936,15 @@ void mt7915_reset(struct mt7915_dev *dev)
 		mt7915_irq_disable(dev, MT_INT_MCU_CMD);
 		queue_work(dev->mt76.wq, &dev->dump_work);
 		return;
+	}
+
+	if ((READ_ONCE(dev->recovery.state) & MT_MCU_CMD_STOP_DMA)) {
+		if (dev->mt76.recovery_state != MT76_RECOVERY_DONE)
+			dev->mt76.recovery_state = MT76_RECOVERY_OVERLAP_TRIGGERED;
+		else
+			dev->mt76.recovery_state = MT76_RECOVERY_TRIGGERED;
+
+		wake_up(&dev->mt76.mcu.wait);
 	}
 
 	queue_work(dev->mt76.wq, &dev->reset_work);
@@ -2219,6 +2232,26 @@ void mt7915_capi_sta_rc_work(void *data, struct ieee80211_sta *sta)
 	spin_unlock_bh(&dev->sta_poll_lock);
 }
 #endif
+static void mt7915_mac_sta_stats_work(struct mt7915_phy *phy)
+{
+	struct mt7915_sta *sta;
+	LIST_HEAD(list);
+
+	spin_lock_bh(&phy->stats_lock);
+	list_splice_init(&phy->stats_list, &list);
+
+	while (!list_empty(&list)) {
+		sta = list_first_entry(&list, struct mt7915_sta, stats_list);
+		list_del_init(&sta->stats_list);
+		spin_unlock_bh(&phy->stats_lock);
+
+		mt7915_mcu_get_tx_rate(phy, sta->wcid.idx);
+
+		spin_lock_bh(&phy->stats_lock);
+	}
+
+	spin_unlock_bh(&phy->stats_lock);
+}
 
 void mt7915_mac_sta_rc_work(struct work_struct *work)
 {
@@ -2280,6 +2313,10 @@ void mt7915_mac_work(struct work_struct *work)
 
 		mt7915_mac_update_stats(phy);
 		mt7915_mac_severe_check(phy);
+	}
+	if (++phy->stats_work_count == 10) {
+		phy->stats_work_count = 0;
+		mt7915_mac_sta_stats_work(phy);
 	}
 
 	mutex_unlock(&mphy->dev->mutex);
