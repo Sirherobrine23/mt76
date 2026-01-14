@@ -44,7 +44,12 @@ EXPORT_SYMBOL_GPL(__mt76_poll_msec);
 
 int __mt76_wcid_alloc(u32 *mask, int size, u8 flag)
 {
+#ifdef CONFIG_BB_SOC
+#define	MT76_WED_WDS_MIN    128
+#else
 #define MT76_WED_WDS_MIN    256
+#endif 
+
 #define MT76_WED_WDS_CNT    16
 
 	int i, idx = 0, cur;
