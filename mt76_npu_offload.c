@@ -26,8 +26,10 @@ void npu_init_rxD(struct mt7915_dev *dev,struct pci_dev *pdev)
 	int isMailBoxSuccess=0;
 	int ring_size=1536;
 	unsigned char band_idx = 0;
-	if (pdev->bus)
-		band_idx = (pdev->bus->self->devfn >> 3) & 0x1f;
+	struct mt76_dev *mdev = &dev->mt76;
+	band_idx = mdev->slot_id;
+	//if (pdev->bus)
+	//	band_idx = (pdev->bus->self->devfn >> 3) & 0x1f;		
 	if(!dev_dbdc)
 	{
 		isMailBoxSuccess = WIFI_MAIL_API_SET_WAIT_DESC(band_idx, ring_size);
@@ -203,8 +205,10 @@ void get_npu_rxd(struct mt7915_dev *dev,struct pci_dev *pdev)
 	int isMailBoxSuccess=0;
 	unsigned char band_idx = 0;
 	void __iomem *npu_regs;
-	if (pdev->bus)
-		band_idx = (pdev->bus->self->devfn >> 3) & 0x1f;
+	struct mt76_dev *mdev = &dev->mt76;
+	band_idx = mdev->slot_id;
+	//if (pdev->bus)
+	//	band_idx = (pdev->bus->self->devfn >> 3) & 0x1f;
 	if(!dev_dbdc)
 	{
 		isMailBoxSuccess = WIFI_MAIL_API_GET_WAIT_RXDESC_BASE(band_idx, &get_RingBase_2g);

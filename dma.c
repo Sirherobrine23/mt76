@@ -224,10 +224,32 @@ EXPORT_SYMBOL_GPL(mt76_free_pending_rxwi);
 static void
 mt76_dma_sync_idx(struct mt76_dev *dev, struct mt76_queue *q)
 {
-	Q_WRITE(dev, q, desc_base, q->desc_dma);
-	Q_WRITE(dev, q, ring_size, q->ndesc);
-	q->head = Q_READ(dev, q, dma_idx);
-	q->tail = q->head;
+#ifdef CONFIG_SOC_WOE
+	if(woe_enable() && (q->hw_idx == TX_QUEUE0_INDEX || q->hw_idx == TX_QUEUE1_INDEX))
+	{
+		if(dev->slot_id == 0)
+		{
+			pAd.writel_api(q->desc_dma, &q->regs->desc_base, q);
+			pAd.writel_api(q->ndesc, &q->regs->ring_size, q);
+			q->head = pAd.readl_api(&q->regs->dma_idx, q);
+			q->tail = q->head;	
+		}
+		else
+		{
+			pAd_1.writel_api(q->desc_dma, &q->regs->desc_base, q);
+			pAd_1.writel_api(q->ndesc, &q->regs->ring_size, q);
+			q->head = pAd_1.readl_api(&q->regs->dma_idx, q);
+			q->tail = q->head;					
+		}	
+	}
+	else
+#endif
+	{
+		Q_WRITE(dev, q, desc_base, q->desc_dma);
+		Q_WRITE(dev, q, ring_size, q->ndesc);
+		q->head = Q_READ(dev, q, dma_idx);
+		q->tail = q->head;		
+	}
 }
 
 static void
@@ -242,8 +264,26 @@ mt76_dma_queue_reset(struct mt76_dev *dev, struct mt76_queue *q)
 	for (i = 0; i < q->ndesc; i++)
 		q->desc[i].ctrl = cpu_to_le32(MT_DMA_CTL_DMA_DONE);
 
-	Q_WRITE(dev, q, cpu_idx, 0);
-	Q_WRITE(dev, q, dma_idx, 0);
+#ifdef CONFIG_SOC_WOE		
+	if(woe_enable() && (q->hw_idx == TX_QUEUE0_INDEX || q->hw_idx == TX_QUEUE1_INDEX))
+	{
+		if(dev->slot_id == 0)
+		{
+			pAd.writel_api(0, &q->regs->cpu_idx, q);
+			pAd.writel_api(0, &q->regs->dma_idx, q);
+		}
+		else
+		{
+			pAd_1.writel_api(0, &q->regs->cpu_idx, q);
+			pAd_1.writel_api(0, &q->regs->dma_idx, q);				
+		}			
+	}
+	else
+#endif
+	{
+		Q_WRITE(dev, q, cpu_idx, 0);
+		Q_WRITE(dev, q, dma_idx, 0);
+	}
 	mt76_dma_sync_idx(dev, q);
 }
 
