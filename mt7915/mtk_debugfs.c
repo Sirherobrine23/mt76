@@ -2689,16 +2689,28 @@ static int mt7915_token_txd_read(struct seq_file *s, void *data)
 
 	t = idr_find(&dev->mt76.token, dev->dbg.token_idx);
 
-	spin_unlock_bh(&dev->mt76.token_lock);
 	if (t != NULL) {
 		struct mt76_dev *mdev = &dev->mt76;
 		txwi = ((u8*)(t)) - (mdev->drv->txwi_size);
 		mt7915_dump_tmac_info((u8*) txwi);
 		seq_printf(s, "\n");
+		
+		if (t->skb == NULL) {
+			printk("SKB is NULL, token_idx: %d\n", dev->dbg.token_idx);
+			spin_unlock_bh(&dev->mt76.token_lock);
+			return 0;
+		}
+
+		if (t->skb->data == NULL) {
+			printk("SKB->data is NULL, token_idx:%d\n", dev->dbg.token_idx);
+			spin_unlock_bh(&dev->mt76.token_lock);
+			return 0;
+		}
 		printk("[SKB]\n");
 		print_hex_dump(KERN_ERR , "", DUMP_PREFIX_OFFSET, 16, 1, (u8 *)t->skb->data, t->skb->len, false);
 		seq_printf(s, "\n");
 	}
+	spin_unlock_bh(&dev->mt76.token_lock);
 	return 0;
 }
 
