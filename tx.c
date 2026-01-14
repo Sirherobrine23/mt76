@@ -115,6 +115,7 @@ mt76_tx_status_skb_add(struct mt76_dev *dev, struct mt76_wcid *wcid,
 		       struct sk_buff *skb)
 {
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
+	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
 	struct mt76_tx_cb *cb = mt76_tx_skb_cb(skb);
 	int pid;
 
@@ -125,6 +126,12 @@ mt76_tx_status_skb_add(struct mt76_dev *dev, struct mt76_wcid *wcid,
 
 	if (info->flags & IEEE80211_TX_CTL_NO_ACK)
 		return MT_PACKET_ID_NO_ACK;
+
+	//if (mtk_wed_device_active(&dev->mmio.wed) &&
+	if(woe_enable() &&
+	    ((info->flags & IEEE80211_TX_CTL_HW_80211_ENCAP) ||
+	    ieee80211_is_data(hdr->frame_control)))
+		return MT_PACKET_ID_WED;
 
 	if (!(info->flags & (IEEE80211_TX_CTL_REQ_TX_STATUS |
 			     IEEE80211_TX_CTL_RATE_CTRL_PROBE)))
@@ -225,6 +232,7 @@ mt76_tx_check_non_aql(struct mt76_dev *dev, struct mt76_wcid *wcid,
 void __mt76_tx_complete_skb(struct mt76_dev *dev, u16 wcid_idx, struct sk_buff *skb,
 			    struct list_head *free_list)
 {
+	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
 	struct mt76_tx_cb *cb = mt76_tx_skb_cb(skb);
 	struct ieee80211_tx_status status = {
 		.skb = skb,
@@ -246,6 +254,7 @@ void __mt76_tx_complete_skb(struct mt76_dev *dev, u16 wcid_idx, struct sk_buff *
 		struct mt76_phy *phy = hw->priv;
 
 		phy->test.tx_done++;
+
 		if (phy->test.tx_queued == phy->test.tx_done)
 			wake_up(&dev->tx_wait);
 
@@ -257,6 +266,14 @@ void __mt76_tx_complete_skb(struct mt76_dev *dev, u16 wcid_idx, struct sk_buff *
 	if (cb->pktid < MT_PACKET_ID_FIRST) {
 		hw = mt76_tx_status_get_hw(dev, skb);
 		status.sta = wcid_to_sta(wcid);
+		//if (mtk_wed_device_active(&dev->mmio.wed) &&
+		if(woe_enable() &&
+		    (info->flags & IEEE80211_TX_CTL_REQ_TX_STATUS)) {
+			if (status.sta) {
+				info->status.rates[0].idx = -1;
+				status.rate = &wcid->rate;
+			}
+		}
 		ieee80211_tx_status_ext(hw, &status);
 		goto out;
 	}

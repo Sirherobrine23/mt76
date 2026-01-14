@@ -283,7 +283,8 @@ struct mt76_sta_stats {
 	u64 tx_mcs[16];		/* mcs idx */
 	u64 tx_bytes;
 	/* WED TX */
-	u32 tx_packets;
+	u32 tx_packets;		/* unit: MSDU */
+	u32 tx_mpdu_cnt;
 	u32 tx_retries;
 	u32 tx_failed;
 	/* WED RX */
@@ -1238,7 +1239,9 @@ mt76_testmode_entry_data(struct mt76_phy *phy, struct mt76_wcid *wcid)
 	return (struct mt76_testmode_entry_data *)((u8 *)wcid +
 						   phy->hw->sta_data_size);
 }
+
 #define list_entry_is_head(pos, head, member) (&pos->member == (head))
+
 #define mt76_tm_for_each_entry(phy, wcid, ed)				\
 	for (wcid = mt76_testmode_first_entry(phy),			\
 	     ed = mt76_testmode_entry_data(phy, wcid);			\
@@ -1247,6 +1250,7 @@ mt76_testmode_entry_data(struct mt76_phy *phy, struct mt76_wcid *wcid)
 	      (!phy->test.aid && wcid == &phy->dev->global_wcid)) && ed;	\
 	     wcid = list_next_entry(wcid, list),			\
 	     ed = mt76_testmode_entry_data(phy, wcid))
+
 #endif
 
 static inline bool __mt76_is_testmode_skb(struct mt76_phy *phy,

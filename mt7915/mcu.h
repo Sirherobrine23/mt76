@@ -11,7 +11,7 @@ enum {
 	MCU_ATE_SET_TSSI = 0x5,
 	MCU_ATE_SET_DPD = 0x6,
 	MCU_ATE_SET_RATE_POWER_OFFSET = 0x7,
-	MCU_ATE_SET_THERMAL_COMP = 0x8,
+	MCU_ATE_SET_THERMAL_COMP = 0x8,		
 	MCU_ATE_SET_FREQ_OFFSET = 0xa,
 	MCU_ATE_SET_PHY_COUNT = 0x11,
 	MCU_ATE_SET_SLOT_TIME = 0x13,
@@ -290,6 +290,17 @@ enum {
 	MCU_WA_PARAM_RED_SHOW_STA = 0xf,
 	MCU_WA_PARAM_RED_TARGET_DELAY = 0x10,
 #endif
+};
+
+enum {
+	MCU_WA_QUERY_GET_TX_STAT = 0x15,
+};
+
+struct mt7915_mcu_wa_tx_stat {
+	__le16 wlan_idx;
+	u8 __rsv2[2];
+	__le32 tx_bytes;
+	__le32 tx_msdu_cnt;
 };
 
 enum mcu_mmps_mode {
@@ -698,10 +709,14 @@ enum {
 	SER_RECOVER
 };
 
-#define MT7915_MAX_BEACON_SIZE		512
-#define MT7915_MAX_INBAND_FRAME_SIZE	256
-#define MT7915_MAX_BSS_OFFLOAD_SIZE	(MT7915_MAX_BEACON_SIZE +	  \
-					 MT7915_MAX_INBAND_FRAME_SIZE +	  \
+#define MT7915_MAX_BEACON_SIZE		1308
+#define MT7915_BEACON_UPDATE_SIZE	(sizeof(struct sta_req_hdr) +	\
+					 sizeof(struct bss_info_bcn) +	\
+					 sizeof(struct bss_info_bcn_cntdwn) +	\
+					 sizeof(struct bss_info_bcn_mbss) +	\
+					 MT_TXD_SIZE +	\
+					 sizeof(struct bss_info_bcn_cont))
+#define MT7915_MAX_BSS_OFFLOAD_SIZE	(MT7915_MAX_BEACON_SIZE +	\
 					 MT7915_BEACON_UPDATE_SIZE)
 
 #define MT7915_BSS_UPDATE_MAX_SIZE	(sizeof(struct sta_req_hdr) +	\
@@ -713,12 +728,6 @@ enum {
 					 sizeof(struct bss_info_he) +	\
 					 sizeof(struct bss_info_bmc_rate) +\
 					 sizeof(struct bss_info_ext_bss))
-
-#define MT7915_BEACON_UPDATE_SIZE	(sizeof(struct sta_req_hdr) +	\
-					 sizeof(struct bss_info_bcn_cntdwn) + \
-					 sizeof(struct bss_info_bcn_mbss) + \
-					 sizeof(struct bss_info_bcn_cont) + \
-					 sizeof(struct bss_info_inband_discovery))
 
 static inline s8
 mt7915_get_power_bound(struct mt7915_phy *phy, s8 txpower)
@@ -868,6 +877,13 @@ struct three_wire_cfg {
 	u8 rsv[3];
 } __packed;
 
+struct rts_sigta_cfg {
+	__le16 tag;
+	__le16 length;
+	bool enable; /* 0: Disable, 1: Enable */
+	u8 rsv[3];
+} __packed;
+
 struct cfg_basic_info {
 	u8 dbdc_idx;
 	u8 rsv[3];
@@ -875,11 +891,13 @@ struct cfg_basic_info {
 	union {
 		struct cert_cfg cert;
 		struct three_wire_cfg three_wire;
+		struct rts_sigta_cfg rts_sigta;
 	};
 } __packed;
 
 enum {
 	CFGINFO_CERT_CFG = 4,
+	CFGINFO_RTS_SIGTA_EN_FEATURE = 7,
 	CFGINFO_3WIRE_EN_CFG = 10,
 };
 
@@ -983,9 +1001,10 @@ struct mt7915_muru {
 #define MURU_OFDMA_SCH_TYPE_UL          BIT(1)
 
 /* Common Config */
-/* #define MURU_COMM_PPDU_FMT              BIT(0) */
-/* #define MURU_COMM_SCH_TYPE              BIT(1) */
-/* #define MURU_COMM_SET                   (MURU_COMM_PPDU_FMT | MURU_COMM_SCH_TYPE) */
+//#define MURU_COMM_PPDU_FMT              BIT(0)
+//#define MURU_COMM_SCH_TYPE              BIT(1)
+//#define MURU_COMM_SET                   (MURU_COMM_PPDU_FMT | MURU_COMM_SCH_TYPE)
+/* DL&UL User config*/
 #define MURU_COMM_PPDU_FMT     BIT(0)
 #define MURU_COMM_SCH_TYPE     BIT(1)
 #define MURU_COMM_BAND         BIT(2)
@@ -995,8 +1014,31 @@ struct mt7915_muru {
 #define MURU_COMM_SET      (MURU_COMM_PPDU_FMT | MURU_COMM_BAND | \
 				MURU_COMM_WMM | MURU_COMM_SPE_IDX)
 
-/* DL&UL User config */
+
+
 #define MURU_USER_CNT                   BIT(4)
+
+struct mt7915_mcu_tx_stat_v1 {
+	u8 wlan_idx_lo;
+	u8 band_idx;
+	u8 wlan_idx_hi;
+	u8 __rsv1[29];
+	__le32 tx_cnt;
+	__le32 tx_failed;
+	u8 __rsv2[26];
+};
+
+struct mt7915_mcu_tx_stat_v2 {
+	u8 __rsv1[4];
+	__le16 wlan_idx;
+	u8 __rsv2[2];
+	__le32 tx_cnt;
+	__le32 tx_failed;
+};
+
+enum {
+	MCU_GET_TX_STAT_CNT = 8,
+};
 
 enum {
    CAPI_SU,
