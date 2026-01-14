@@ -950,7 +950,7 @@ int tasklet_schedule_rx_data_done_npu_5G(void)
 	return 0;
 }
 extern int dev_dbdc;
-static void mt7915_npu_rx_tasklet(struct tasklet_struct *t)
+void mt7915_npu_rx_tasklet(struct tasklet_struct *t)
 {
 	struct mt7915_dev *dev;
     if(MT7915_2G)
@@ -961,7 +961,7 @@ static void mt7915_npu_rx_tasklet(struct tasklet_struct *t)
 }
 
 
-static void mt7915_npu_rx_5g_tasklet(struct tasklet_struct *t)
+void mt7915_npu_rx_5g_tasklet(struct tasklet_struct *t)
 {
 
 	struct mt7915_dev *dev;

@@ -1711,7 +1711,7 @@ mt7915_mac_full_reset(struct mt7915_dev *dev)
 					     &ext_phy->mac_work,
 					     MT7915_WATCHDOG_TIME);
 }
-
+extern void register_rx_data_done_task(struct mt7915_dev *dev, int enable);
 /* system error recovery */
 void mt7915_mac_reset_work(struct work_struct *work)
 {
@@ -1719,7 +1719,6 @@ void mt7915_mac_reset_work(struct work_struct *work)
 	struct mt76_phy *ext_phy;
 	struct mt7915_dev *dev;
 	int i;
-
 	dev = container_of(work, struct mt7915_dev, reset_work);
 	ext_phy = dev->mt76.phys[MT_BAND1];
 	phy2 = ext_phy ? ext_phy->priv : NULL;
@@ -1760,6 +1759,19 @@ void mt7915_mac_reset_work(struct work_struct *work)
 		if (!is_mt7986(&dev->mt76))
 			mt76_wr(dev, MT_INT_WED_MASK_CSR, 0);
 	}
+#else
+	struct mt76_dev *mdev = &dev->mt76;
+#ifdef CONFIG_SOC_WOE
+	if(woe_enable())
+	{
+		if(mdev->slot_id == 0)
+			mt_wlan_hook_call(WLAN_HOOK_WOE_STOP, &pAd, NULL);
+		else
+			mt_wlan_hook_call(WLAN_HOOK_WOE_STOP, &pAd_1, NULL);	
+		if (!is_mt7986(&dev->mt76))
+			mt76_wr(dev, MT_INT_WED_MASK_CSR, 0);		
+	}
+#endif
 #endif
 	ieee80211_stop_queues(mt76_hw(dev));
 	if (ext_phy)
@@ -1795,14 +1807,11 @@ void mt7915_mac_reset_work(struct work_struct *work)
 	mt76_wr(dev, MT_MCU_INT_EVENT, MT_MCU_INT_EVENT_RESET_DONE);
 	mt7915_wait_reset_state(dev, MT_MCU_CMD_NORMAL_STATE);
 	/* enable dma tx/rx and interrupt */
-	//__mt7915_dma_enable(dev, false, false);
-
-
+	__mt7915_dma_enable(dev, false, false);
 	clear_bit(MT76_MCU_RESET, &dev->mphy.state);
 	clear_bit(MT76_RESET, &dev->mphy.state);
 	if (phy2)
 		clear_bit(MT76_RESET, &phy2->mt76->state);
-
 	local_bh_disable();
 	mt76_for_each_q_rx(&dev->mt76, i) {
 		napi_enable(&dev->mt76.napi[i]);
@@ -1825,7 +1834,10 @@ void mt7915_mac_reset_work(struct work_struct *work)
 	ieee80211_wake_queues(mt76_hw(dev));
 	if (ext_phy)
 		ieee80211_wake_queues(ext_phy->hw);
-
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD	
+	if(npu_enable())
+		register_rx_data_done_task(dev, 1);
+#endif
 	mutex_unlock(&dev->mt76.mutex);
 
 	mt7915_update_beacons(dev);

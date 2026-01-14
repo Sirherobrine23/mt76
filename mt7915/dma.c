@@ -232,8 +232,83 @@ static void mt7915_dma_disable(struct mt7915_dev *dev, bool rst)
 				   MT_WFDMA1_GLO_CFG_OMIT_RX_INFO_PFET2);
 	}
 }
+int __mt7915_dma_enable(struct mt7915_dev *dev, bool reset, bool wed_reset)
+{
+	struct mt76_dev *mdev = &dev->mt76;
+	u32 hif1_ofs = 0;
+	u32 irq_mask;
 
-static int mt7915_dma_enable(struct mt7915_dev *dev)
+	if (dev->hif2)
+		hif1_ofs = MT_WFDMA0_PCIE1(0) - MT_WFDMA0(0);
+
+	if(!reset)
+	{
+		mt76_set(dev, MT_WFDMA0_GLO_CFG,
+		MT_WFDMA0_GLO_CFG_TX_DMA_EN |
+		MT_WFDMA0_GLO_CFG_RX_DMA_EN |
+		MT_WFDMA0_GLO_CFG_OMIT_TX_INFO |
+		MT_WFDMA0_GLO_CFG_OMIT_RX_INFO_PFET2);
+
+		if (is_mt7915(mdev))
+			mt76_set(dev, MT_WFDMA1_GLO_CFG,
+				 MT_WFDMA1_GLO_CFG_TX_DMA_EN |
+				 MT_WFDMA1_GLO_CFG_RX_DMA_EN |
+				 MT_WFDMA1_GLO_CFG_OMIT_TX_INFO |
+				 MT_WFDMA1_GLO_CFG_OMIT_RX_INFO);
+
+		if (dev->hif2) {
+			mt76_set(dev, MT_WFDMA0_GLO_CFG + hif1_ofs,
+				 MT_WFDMA0_GLO_CFG_TX_DMA_EN |
+				 MT_WFDMA0_GLO_CFG_RX_DMA_EN |
+				 MT_WFDMA0_GLO_CFG_OMIT_TX_INFO |
+				 MT_WFDMA0_GLO_CFG_OMIT_RX_INFO_PFET2);
+
+			if (is_mt7915(mdev))
+				mt76_set(dev, MT_WFDMA1_GLO_CFG + hif1_ofs,
+					 MT_WFDMA1_GLO_CFG_TX_DMA_EN |
+					 MT_WFDMA1_GLO_CFG_RX_DMA_EN |
+					 MT_WFDMA1_GLO_CFG_OMIT_TX_INFO |
+					 MT_WFDMA1_GLO_CFG_OMIT_RX_INFO);
+
+			mt76_set(dev, MT_WFDMA_HOST_CONFIG,
+				 MT_WFDMA_HOST_CONFIG_PDMA_BAND);
+		}
+	}
+	irq_mask = MT_INT_RX_DONE_MCU |
+		   MT_INT_TX_DONE_MCU |
+		   MT_INT_MCU_CMD;
+	if (!dev->phy.mt76->band_idx)
+		irq_mask |= MT_INT_BAND0_RX_DONE;
+
+	if (dev->dbdc_support || dev->phy.mt76->band_idx)
+		irq_mask |= MT_INT_BAND1_RX_DONE;
+#ifdef CONFIG_SOC_WOE
+	if(woe_enable() && wed_reset)
+	{
+		u32 wed_irq_mask = irq_mask;
+		wed_irq_mask |= MT_INT_TX_DONE_BAND0 | MT_INT_TX_DONE_BAND1;
+		mt76_wr(dev, MT_INT_WED_MASK_CSR, wed_irq_mask);
+		if(mdev->slot_id == 0)
+		{
+			pAd.wed_int_msk = wed_irq_mask;
+			mt_wlan_hook_call(WLAN_HOOK_HIF_INIT, &pAd, NULL);
+		}
+		else
+		{
+			pAd_1.wed_int_msk = wed_irq_mask;
+			mt_wlan_hook_call(WLAN_HOOK_HIF_INIT, &pAd_1, NULL);		
+		}
+	}
+#endif	
+	mt7915_irq_enable(dev, irq_mask);
+	mt7915_irq_disable(dev, 0);
+	return 0;
+	
+}
+
+
+
+static int mt7915_dma_enable(struct mt7915_dev *dev, bool reset)
 {
 	struct mt76_dev *mdev = &dev->mt76;
 	u32 hif1_ofs = 0;
@@ -305,84 +380,11 @@ static int mt7915_dma_enable(struct mt7915_dev *dev)
 	mt76_poll(dev, MT_WFDMA_EXT_CSR_HIF_MISC,
 		  MT_WFDMA_EXT_CSR_HIF_MISC_BUSY, 0, 1000);
 
-	/* set WFDMA Tx/Rx */
-	mt76_set(dev, MT_WFDMA0_GLO_CFG,
-		 MT_WFDMA0_GLO_CFG_TX_DMA_EN |
-		 MT_WFDMA0_GLO_CFG_RX_DMA_EN |
-		 MT_WFDMA0_GLO_CFG_OMIT_TX_INFO |
-		 MT_WFDMA0_GLO_CFG_OMIT_RX_INFO_PFET2);
 
-	if (is_mt7915(mdev))
-		mt76_set(dev, MT_WFDMA1_GLO_CFG,
-			 MT_WFDMA1_GLO_CFG_TX_DMA_EN |
-			 MT_WFDMA1_GLO_CFG_RX_DMA_EN |
-			 MT_WFDMA1_GLO_CFG_OMIT_TX_INFO |
-			 MT_WFDMA1_GLO_CFG_OMIT_RX_INFO);
 
-	if (dev->hif2) {
-		mt76_set(dev, MT_WFDMA0_GLO_CFG + hif1_ofs,
-			 MT_WFDMA0_GLO_CFG_TX_DMA_EN |
-			 MT_WFDMA0_GLO_CFG_RX_DMA_EN |
-			 MT_WFDMA0_GLO_CFG_OMIT_TX_INFO |
-			 MT_WFDMA0_GLO_CFG_OMIT_RX_INFO_PFET2);
 
-		if (is_mt7915(mdev))
-			mt76_set(dev, MT_WFDMA1_GLO_CFG + hif1_ofs,
-				 MT_WFDMA1_GLO_CFG_TX_DMA_EN |
-				 MT_WFDMA1_GLO_CFG_RX_DMA_EN |
-				 MT_WFDMA1_GLO_CFG_OMIT_TX_INFO |
-				 MT_WFDMA1_GLO_CFG_OMIT_RX_INFO);
 
-		mt76_set(dev, MT_WFDMA_HOST_CONFIG,
-			 MT_WFDMA_HOST_CONFIG_PDMA_BAND);
-	}
-
-	/* enable interrupts for TX/RX rings */
-	irq_mask = MT_INT_RX_DONE_MCU |
-		   MT_INT_TX_DONE_MCU |
-		   MT_INT_MCU_CMD;
-	if (!dev->phy.mt76->band_idx)
-		irq_mask |= MT_INT_BAND0_RX_DONE;
-
-	if (dev->dbdc_support || dev->phy.mt76->band_idx)
-		irq_mask |= MT_INT_BAND1_RX_DONE;
-#if 0
-	if (mtk_wed_device_active(&dev->mt76.mmio.wed)) {
-		u32 wed_irq_mask = irq_mask;
-		int ret;
-
-		wed_irq_mask |= MT_INT_TX_DONE_BAND0 | MT_INT_TX_DONE_BAND1;
-		if (!is_mt7986(&dev->mt76))
-			mt76_wr(dev, MT_INT_WED_MASK_CSR, wed_irq_mask);
-		else
-			mt76_wr(dev, MT_INT_MASK_CSR, wed_irq_mask);
-
-		ret = mt7915_mcu_wed_enable_rx_stats(dev);
-		if (ret)
-			return ret;
-
-		mtk_wed_device_start(&dev->mt76.mmio.wed, wed_irq_mask);
-	}
-#endif
-#ifdef CONFIG_SOC_WOE
-	if(woe_enable())
-	{
-		u32 wed_irq_mask = irq_mask;
-		wed_irq_mask |= MT_INT_TX_DONE_BAND0 | MT_INT_TX_DONE_BAND1;
-		mt76_wr(dev, MT_INT_WED_MASK_CSR, wed_irq_mask);
-		if(mdev->slot_id == 0)
-		{
-			pAd.wed_int_msk = wed_irq_mask;
-			mt_wlan_hook_call(WLAN_HOOK_HIF_INIT, &pAd, NULL);
-		}
-		else
-		{
-			pAd_1.wed_int_msk = wed_irq_mask;
-			mt_wlan_hook_call(WLAN_HOOK_HIF_INIT, &pAd_1, NULL);		
-		}
-	}
-#endif	
-	mt7915_irq_enable(dev, irq_mask);
+	return __mt7915_dma_enable(dev, reset, true);
 
 	return 0;
 }
@@ -638,10 +640,91 @@ int mt7915_dma_init(struct mt7915_dev *dev, struct mt7915_phy *phy2)
 			  mt7915_poll_tx, NAPI_POLL_WEIGHT);
 	napi_enable(&dev->mt76.tx_napi);
 
-	mt7915_dma_enable(dev);
+	mt7915_dma_enable(dev, false);
 
 	return 0;
 }
+
+
+extern int dev_dbdc;
+extern void (*hostdapt_registe_wifitask_hook)(unsigned int ringIdx, void *func);
+extern int tasklet_schedule_rx_data_done_npu_2G(void);
+extern int tasklet_schedule_rx_data_done_npu_5G(void);
+extern void mt7915_npu_rx_tasklet(struct tasklet_struct *t);
+extern void mt7915_npu_rx_5g_tasklet(struct tasklet_struct *t);
+extern struct mt7915_dev *MT7915_2G;
+extern struct mt7915_dev *MT7915_5G;
+
+
+void register_rx_data_done_task(struct mt7915_dev *dev, int enable)
+{
+	struct mt76_dev *mdev = &dev->mt76;
+	if(enable)
+	{
+		if(dev_dbdc)
+		{
+			if(hostdapt_registe_wifitask_hook)
+				hostdapt_registe_wifitask_hook(0, tasklet_schedule_rx_data_done_npu_2G);
+			tasklet_setup(&dev->npu_rx_tasklet_2g, mt7915_npu_rx_tasklet);
+			MT7915_2G=dev;
+			
+			if(hostdapt_registe_wifitask_hook)
+				hostdapt_registe_wifitask_hook(1, tasklet_schedule_rx_data_done_npu_5G);
+			tasklet_setup(&dev->npu_rx_tasklet_5g, mt7915_npu_rx_5g_tasklet);
+			MT7915_5G=dev;			
+		}
+		else
+		{
+			if(mdev->slot_id == 0)
+			{
+				if(hostdapt_registe_wifitask_hook)
+					hostdapt_registe_wifitask_hook(0, tasklet_schedule_rx_data_done_npu_2G);
+				tasklet_setup(&dev->npu_rx_tasklet_2g, mt7915_npu_rx_tasklet);
+				MT7915_2G=dev;
+				
+			}	
+			else
+			{
+				if(hostdapt_registe_wifitask_hook)
+					hostdapt_registe_wifitask_hook(1, tasklet_schedule_rx_data_done_npu_5G);
+				tasklet_setup(&dev->npu_rx_tasklet_5g, mt7915_npu_rx_5g_tasklet);
+				MT7915_5G=dev;
+			}
+		}		
+	}
+	else
+	{
+		if(dev_dbdc)
+		{
+			if(hostdapt_registe_wifitask_hook)
+				hostdapt_registe_wifitask_hook(0, NULL);
+			tasklet_kill(&dev->npu_rx_tasklet_2g);
+			MT7915_2G=NULL;
+			if(hostdapt_registe_wifitask_hook)
+				hostdapt_registe_wifitask_hook(1, NULL);
+			tasklet_kill(&dev->npu_rx_tasklet_5g);
+			MT7915_5G=NULL;			
+		}
+		else
+		{
+			if(mdev->slot_id == 0)
+			{
+				if(hostdapt_registe_wifitask_hook)
+					hostdapt_registe_wifitask_hook(0, NULL);
+				tasklet_kill(&dev->npu_rx_tasklet_2g);
+				MT7915_2G=NULL;
+			}
+			else
+			{
+				if(hostdapt_registe_wifitask_hook)
+					hostdapt_registe_wifitask_hook(1, NULL);
+				tasklet_kill(&dev->npu_rx_tasklet_5g);
+				MT7915_5G=NULL;				
+			}
+		}			
+	}	
+}
+
 
 int mt7915_dma_reset(struct mt7915_dev *dev, bool force)
 {
@@ -649,6 +732,7 @@ int mt7915_dma_reset(struct mt7915_dev *dev, bool force)
 #if 0
 	struct mtk_wed_device *wed = &dev->mt76.mmio.wed;
 #endif
+	struct mt76_dev *mdev = &dev->mt76;
 	int i;
 
 	/* clean up hw queues */
@@ -672,6 +756,19 @@ int mt7915_dma_reset(struct mt7915_dev *dev, bool force)
 	if (mtk_wed_device_active(&dev->mt76.mmio.wed))
 		mtk_wed_device_dma_reset(&dev->mt76.mmio.wed);
 #endif
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD
+	if(npu_enable())
+		register_rx_data_done_task(dev, 0);
+#endif
+#ifdef CONFIG_SOC_WOE
+	if(woe_enable())
+	{		
+		if(mdev->slot_id == 0)
+			mt_wlan_hook_call(WLAN_HOOK_WOE_WDMA_RESET, &pAd, NULL);
+		else
+			mt_wlan_hook_call(WLAN_HOOK_WOE_WDMA_RESET, &pAd_1, NULL);		
+	}
+#endif		
 	mt7915_dma_disable(dev, force);
 #if 0
 	/* set wifi reset done, wait FE reset */
@@ -682,6 +779,15 @@ int mt7915_dma_reset(struct mt7915_dev *dev, bool force)
 		rtnl_unlock();
 		wait_for_completion(&wed->fe_reset_done);
 	}
+#endif
+#ifdef CONFIG_SOC_WOE
+	if(woe_enable())
+	{
+		if(mdev->slot_id == 0)
+			mt_wlan_hook_call(WLAN_HOOK_RING_RESET, &pAd, NULL);
+		else
+			mt_wlan_hook_call(WLAN_HOOK_RING_RESET, &pAd_1, NULL);		
+	}	
 #endif
 	/* reset hw queues */
 	for (i = 0; i < __MT_TXQ_MAX; i++) {
@@ -712,15 +818,26 @@ int mt7915_dma_reset(struct mt7915_dev *dev, bool force)
 	}
 
 	mt76_tx_status_check(&dev->mt76, true);
-
 	mt76_for_each_q_rx(&dev->mt76, i)
 		mt76_queue_rx_reset(dev, i);
 #if 0
 	if(mtk_wed_device_active(wed) && is_mt7915(&dev->mt76))
 		mt76_rmw(dev, MT_WFDMA0_EXT0_CFG, MT_WFDMA0_EXT0_RXWB_KEEP,
 			 MT_WFDMA0_EXT0_RXWB_KEEP);
+#else
+	if(woe_enable() && is_mt7915(&dev->mt76))
+		mt76_rmw(dev, MT_WFDMA0_EXT0_CFG, MT_WFDMA0_EXT0_RXWB_KEEP,
+			 MT_WFDMA0_EXT0_RXWB_KEEP);
 #endif
-	mt7915_dma_enable(dev);
+
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD
+	//struct pci_dev *pdev = dev->pdev_ser;
+	if(npu_enable()){	
+		npu_init_rxD(dev,NULL);
+		get_npu_rxd(dev,NULL);
+	}
+#endif	
+	mt7915_dma_enable(dev, !force);
 
 	return 0;
 }
