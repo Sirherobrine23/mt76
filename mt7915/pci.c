@@ -199,10 +199,10 @@ static int mt7915_pci_probe(struct pci_dev *pdev,
 	int irq;
 	int ret;
 #ifdef CONFIG_SOC_WOE 
-//	set_woe_enable(woe_enable_chk());
+	set_woe_enable(woe_enable_chk());
 #endif
 #ifdef TCSUPPORT_NPU_WIFI_OFFLOAD
-//	set_npu_enable(npu_enable_chk());
+	set_npu_enable(npu_enable_chk());
 #endif
 
 	ret = pcim_enable_device(pdev);
