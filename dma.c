@@ -220,12 +220,16 @@ mt76_free_pending_rxwi(struct mt76_dev *dev)
 	local_bh_enable();
 }
 EXPORT_SYMBOL_GPL(mt76_free_pending_rxwi);
-
+extern int dev_dbdc;
 static void
 mt76_dma_sync_idx(struct mt76_dev *dev, struct mt76_queue *q)
 {
 #ifdef CONFIG_SOC_WOE
+#if defined(TCSUPPORT_CPU_AN7552)
+	if(woe_enable() && (q->hw_idx == TX_QUEUE0_INDEX || q->hw_idx == TX_QUEUE1_INDEX) && (dev->slot_id == 1 || dev_dbdc))
+#else
 	if(woe_enable() && (q->hw_idx == TX_QUEUE0_INDEX || q->hw_idx == TX_QUEUE1_INDEX))
+#endif
 	{
 		if(dev->slot_id == 0)
 		{
@@ -264,8 +268,12 @@ mt76_dma_queue_reset(struct mt76_dev *dev, struct mt76_queue *q)
 	for (i = 0; i < q->ndesc; i++)
 		q->desc[i].ctrl = cpu_to_le32(MT_DMA_CTL_DMA_DONE);
 
-#ifdef CONFIG_SOC_WOE		
+#ifdef CONFIG_SOC_WOE	
+#if defined(TCSUPPORT_CPU_AN7552)
+	if(woe_enable() && (q->hw_idx == TX_QUEUE0_INDEX || q->hw_idx == TX_QUEUE1_INDEX) && (dev->slot_id == 1 || dev_dbdc))
+#else
 	if(woe_enable() && (q->hw_idx == TX_QUEUE0_INDEX || q->hw_idx == TX_QUEUE1_INDEX))
+#endif
 	{
 		if(dev->slot_id == 0)
 		{
@@ -459,7 +467,11 @@ mt76_dma_kick_queue(struct mt76_dev *dev, struct mt76_queue *q)
 {
 	wmb();
 #ifdef CONFIG_SOC_WOE 
+#if defined(TCSUPPORT_CPU_AN7552)
+	if(woe_enable() && (dev->slot_id == 1 || dev_dbdc))
+#else
 	if(woe_enable())
+#endif
 	{
 		if(dev->slot_id == 0)
 		{
@@ -501,7 +513,11 @@ mt76_dma_tx_cleanup(struct mt76_dev *dev, struct mt76_queue *q, bool flush)
 	else
 	{
 #ifdef CONFIG_SOC_WOE 
+#if defined(TCSUPPORT_CPU_AN7552)
+		if(woe_enable() && (dev->slot_id == 1 || dev_dbdc))
+#else
 		if(woe_enable())
+#endif
 			last = woe_read_1(dev, q);	
 		else
 			last = readl(&q->regs->dma_idx);
@@ -522,8 +538,12 @@ mt76_dma_tx_cleanup(struct mt76_dev *dev, struct mt76_queue *q, bool flush)
 
 		if (!flush && q->tail == last)
 		{
-#ifdef CONFIG_SOC_WOE 			
+#ifdef CONFIG_SOC_WOE 
+#if defined(TCSUPPORT_CPU_AN7552)
+		if(woe_enable() && (dev->slot_id == 1 || dev_dbdc))
+#else
 		if(woe_enable())
+#endif
 			last = woe_read_1(dev, q);
 		else
 			last = readl(&q->regs->dma_idx);
@@ -992,7 +1012,11 @@ mt76_dma_alloc_queue(struct mt76_dev *dev, struct mt76_queue *q,
 
 #ifdef CONFIG_SOC_WOE 	
 	/*tx queue0 & tx queue1*/
+#if defined(TCSUPPORT_CPU_AN7552)
+	if(woe_enable() && (dev->slot_id == 1 || dev_dbdc))
+#else
 	if(woe_enable())
+#endif
 	{
 		if(idx == TX_QUEUE0_INDEX || idx == TX_QUEUE1_INDEX)
 			q->regs = dev->mmio.regs + ring_base + (idx - TX_QUEUE0_INDEX) * MT_RING_SIZE;
@@ -1021,7 +1045,11 @@ mt76_dma_alloc_queue(struct mt76_dev *dev, struct mt76_queue *q,
 
 #ifdef CONFIG_SOC_WOE
 	/*tx queue0 & queue1*/
+#if defined(TCSUPPORT_CPU_AN7552)
+	if(woe_enable() && (dev->slot_id == 1 || dev_dbdc))
+#else
 	if(woe_enable())
+#endif
 	{
 		if(idx == TX_QUEUE0_INDEX || idx == TX_QUEUE1_INDEX)
 			mt76_dma_queue_reset_woe(dev, q);
@@ -1088,7 +1116,11 @@ mt76_dma_rx_reset(struct mt76_dev *dev, enum mt76_rxq_id qid)
 
 	mt76_dma_rx_cleanup(dev, q);
 #ifdef CONFIG_SOC_WOE
+#if defined(TCSUPPORT_CPU_AN7552)
+	if(woe_enable() && (dev->slot_id == 1 || dev_dbdc))
+#else
 	if(woe_enable())
+#endif
 	{
 		mt76_dma_wed_setup(dev, q, true);
 
@@ -1162,7 +1194,11 @@ mt76_dma_rx_process(struct mt76_dev *dev, struct mt76_queue *q, int budget)
 #endif
 			/*if whnat enable && rxq_mcu_wa*/
 #ifdef CONFIG_SOC_WOE 
+#if defined(TCSUPPORT_CPU_AN7552)
+	if(woe_enable() && (dev->slot_id == 1 || dev_dbdc))
+#else
 	if(woe_enable())
+#endif
 	{
 		if(q->flags == MT_WED_Q_TXFREE)
 		{
@@ -1188,7 +1224,11 @@ mt76_dma_rx_process(struct mt76_dev *dev, struct mt76_queue *q, int budget)
 		}
 #endif
 #ifdef CONFIG_SOC_WOE 
+#if defined(TCSUPPORT_CPU_AN7552)
+		if(check_ddone && woe_enable() && (dev->slot_id == 1 || dev_dbdc))
+#else
 		if(check_ddone && woe_enable())
+#endif
 		{
 			if(q->tail == dma_idx)
 			{
@@ -1256,8 +1296,6 @@ free_frag:
 	mt76_dma_rx_fill(dev, q);
 	return done;
 }
-int dev_dbdc = 0;
-EXPORT_SYMBOL(dev_dbdc);
 
 int mt76_dma_rx_poll(struct napi_struct *napi, int budget)
 {

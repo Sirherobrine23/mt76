@@ -452,6 +452,8 @@ mt7915_init_wiphy(struct mt7915_phy *phy)
 	}
 }
 
+extern int dev_dbdc;
+
 static void
 mt7915_mac_init_band(struct mt7915_dev *dev, u8 band)
 {
@@ -511,7 +513,11 @@ mt7915_mac_init_band(struct mt7915_dev *dev, u8 band)
 	 * MT_AGG_ACR_PPDU_TXS2H (PPDU format) even though ACR bit is set.
 	 */
 	//if (mtk_wed_device_active(&dev->mt76.mmio.wed))
+#if defined(TCSUPPORT_CPU_AN7552)
+	if(woe_enable() && (dev->mt76.slot_id == 1 || dev_dbdc))
+#else
 	if(woe_enable())
+#endif
 		mt76_set(dev, MT_AGG_ACR4(band), MT_AGG_ACR_PPDU_TXS2H);
 }
 

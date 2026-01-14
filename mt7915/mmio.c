@@ -865,7 +865,7 @@ static int mt7915_mmio_init(struct mt76_dev *mdev,
 
 	return 0;
 }
-
+extern int dev_dbdc;
 void mt7915_dual_hif_set_irq_mask(struct mt7915_dev *dev,
 				  bool write_reg,
 				  u32 clear, u32 set)
@@ -886,7 +886,11 @@ void mt7915_dual_hif_set_irq_mask(struct mt7915_dev *dev,
 		else
 #endif
 #ifdef CONFIG_SOC_WOE 	
+#if defined(TCSUPPORT_CPU_AN7552)
+		if(woe_enable() && (mdev->slot_id == 1 || dev_dbdc))
+#else
 		if(woe_enable())
+#endif
 			mtk_wed_irq_set_mask_woe(mdev, mdev->mmio.irqmask);
 		else
 			mt76_wr(dev, MT_INT_MASK_CSR, mdev->mmio.irqmask);
@@ -999,8 +1003,12 @@ static void mt7915_irq_tasklet(struct tasklet_struct *t)
 		mt76_wr(dev, MT_INT_SOURCE_CSR, intr);
 	}
 #endif
-#ifdef CONFIG_SOC_WOE 	
+#ifdef CONFIG_SOC_WOE 
+#if defined(TCSUPPORT_CPU_AN7552)
+	if(woe_enable() && (dev->mt76.slot_id == 1 || dev_dbdc))
+#else
 	if(woe_enable())
+#endif
 	{
 		mtk_wed_irq_set_mask(dev, 0);
 		if (dev->hif2)
@@ -1090,7 +1098,11 @@ irqreturn_t mt7915_irq_handler(int irq, void *dev_instance)
 		mt76_wr(dev, MT_INT_MASK_CSR, 0);
 #endif
 #ifdef CONFIG_SOC_WOE 
+#if defined(TCSUPPORT_CPU_AN7552)
+	if(woe_enable() && (dev->mt76.slot_id == 1 || dev_dbdc))
+#else
 	if(woe_enable())
+#endif
 		mtk_wed_irq_set_mask(dev, 0);
 	else
 		mt76_wr(dev, MT_INT_MASK_CSR, 0);
@@ -1165,8 +1177,13 @@ struct mt7915_dev *mt7915_mmio_probe(struct device *pdev,
 
 	tasklet_setup(&dev->irq_tasklet, mt7915_irq_tasklet);
 #ifdef TCSUPPORT_NPU_WIFI_OFFLOAD	
-	if (pci_dev->bus)
+	if (pci_dev->bus){
+#if defined(TCSUPPORT_CPU_EN7581) || defined(TCSUPPORT_CPU_AN7552)		
+		band = pci_domain_nr(pci_dev->bus);
+#else
 		band = (pci_dev->bus->self->devfn >> 3) & 0x1f;
+#endif		
+	}
 	else
 		band = 1;
 	dev_dbdc = mt7915_band_config_1(dev);

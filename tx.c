@@ -110,6 +110,7 @@ mt76_tx_status_skb_done(struct mt76_dev *dev, struct sk_buff *skb,
 }
 EXPORT_SYMBOL_GPL(mt76_tx_status_skb_done);
 
+extern int dev_dbdc;
 int
 mt76_tx_status_skb_add(struct mt76_dev *dev, struct mt76_wcid *wcid,
 		       struct sk_buff *skb)
@@ -132,7 +133,11 @@ mt76_tx_status_skb_add(struct mt76_dev *dev, struct mt76_wcid *wcid,
 	
 	if (woe_enable() &&
 		    ((info->flags & IEEE80211_TX_CTL_HW_80211_ENCAP) ||
-		    ieee80211_is_data(hdr->frame_control)))
+#if defined(TCSUPPORT_CPU_AN7552) 		    
+		    ieee80211_is_data(hdr->frame_control)) && (dev->slot_id == 1 || dev_dbdc))
+#else
+			ieee80211_is_data(hdr->frame_control)))
+#endif
 			return MT_PACKET_ID_WED;
 
 		return MT_PACKET_ID_NO_SKB;
@@ -273,7 +278,11 @@ void __mt76_tx_complete_skb(struct mt76_dev *dev, u16 wcid_idx, struct sk_buff *
 		status.sta = wcid_to_sta(wcid);
 		//if (mtk_wed_device_active(&dev->mmio.wed) &&
 		if(woe_enable() &&
-		    (info->flags & IEEE80211_TX_CTL_REQ_TX_STATUS)) {
+#if defined(TCSUPPORT_CPU_AN7552)			
+		    (info->flags & IEEE80211_TX_CTL_REQ_TX_STATUS) && (dev->slot_id == 1 || dev_dbdc)) {
+#else
+			(info->flags & IEEE80211_TX_CTL_REQ_TX_STATUS)) {
+#endif
 			if (status.sta) {
 				info->status.rates[0].idx = -1;
 				status.rate = &wcid->rate;

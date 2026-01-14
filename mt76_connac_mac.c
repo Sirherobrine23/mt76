@@ -253,13 +253,17 @@ void mt76_connac_txp_skb_unmap(struct mt76_dev *dev,
 		mt76_connac_txp_skb_unmap_hw(dev, &txp->hw);
 }
 EXPORT_SYMBOL_GPL(mt76_connac_txp_skb_unmap);
-
+extern int dev_dbdc;
 int mt76_connac_init_tx_queues(struct mt76_phy *phy, int idx, int n_desc,
 			       int ring_base, u32 flags)
 {
 	int i, err;
 #ifdef CONFIG_SOC_WOE 
+#if defined(TCSUPPORT_CPU_AN7552)
+	if(woe_enable() && (phy->dev->slot_id == 1 || dev_dbdc))
+#else
 	if(woe_enable())
+#endif
 	{
 		if(idx == TX_QUEUE0_INDEX || idx == TX_QUEUE1_INDEX)
 			ring_base = 0xd7300;

@@ -67,7 +67,7 @@ static int mt76_mmio_rd_rp(struct mt76_dev *dev, u32 base,
 
 	return 0;
 }
-
+extern int dev_dbdc;
 void mt76_set_irq_mask(struct mt76_dev *dev, u32 addr,
 		       u32 clear, u32 set)
 {
@@ -85,7 +85,11 @@ void mt76_set_irq_mask(struct mt76_dev *dev, u32 addr,
 			mt76_mmio_wr(dev, addr, dev->mmio.irqmask);
 #endif
 #ifdef CONFIG_SOC_WOE 
+#if defined(TCSUPPORT_CPU_AN7552)
+		if(woe_enable() && (dev->slot_id == 1 || dev_dbdc))
+#else
 		if(woe_enable())
+#endif
 			mtk_wed_irq_set_mask_woe(dev, dev->mmio.irqmask);
 		else
 #endif

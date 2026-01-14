@@ -2417,8 +2417,13 @@ int mt7915_mcu_init_firmware(struct mt7915_dev *dev)
 			return ret;
 	}
 #endif
+extern int dev_dbdc;
 #ifdef CONFIG_SOC_WOE 
+#if defined(TCSUPPORT_CPU_AN7552)
+if(woe_enable() && (dev->mt76.slot_id == 1 || dev_dbdc))
+#else
 if(woe_enable())
+#endif
 {
 	dev_ver = FIELD_GET(MTK_WED_REV_ID_MAJIOR, wed_ver_id);
 	if(dev_ver > MTK_WED_V1)
@@ -2447,6 +2452,7 @@ else
 
 	ret = mt7915_mcu_set_muru_ctrl(dev, MURU_SET_PLATFORM_TYPE,
 				       MURU_PLATFORM_TYPE_PERF_LEVEL_2);
+	printk("%s:%d ret=%d !!!\n",__func__,__LINE__,ret);
 	if (ret)
 		return ret;
 

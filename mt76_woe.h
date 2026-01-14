@@ -331,16 +331,22 @@ static inline INT os_alloc_mem(
 		return NDIS_STATUS_FAILURE;
 }
 
-
+extern int dev_dbdc;
 static inline void woe_start(struct pci_dev *pdev, struct mt76_dev *mdev, unsigned long csr_addr, u32 wpdma_base_woe)
 {
 	struct os_cookie *handle = NULL;
 	struct woe_need pAd_woe;
 #ifdef CONFIG_SOC_WOE
+#if defined(TCSUPPORT_CPU_EN7581) || defined(TCSUPPORT_CPU_AN7552)
+	mdev->slot_id = pci_domain_nr(pdev->bus);
+	if(mdev->slot_id == 0 && !dev_dbdc)
+		return ;
+#else
 	if (pdev->bus)
 		mdev->slot_id = (pdev->bus->self->devfn >> 3) & 0x1f;
 	else
 		mdev->slot_id = 1;
+#endif	
 	if(mdev->slot_id == 0)
 		pAd_woe.pAd_index = WHNAT_0;
 	else

@@ -232,7 +232,7 @@ static void mt7915_dma_disable(struct mt7915_dev *dev, bool rst)
 				   MT_WFDMA1_GLO_CFG_OMIT_RX_INFO_PFET2);
 	}
 }
-
+extern int dev_dbdc;
 int __mt7915_dma_enable(struct mt7915_dev *dev, bool reset, bool wed_reset)
 {
 	struct mt76_dev *mdev = &dev->mt76;
@@ -284,7 +284,11 @@ int __mt7915_dma_enable(struct mt7915_dev *dev, bool reset, bool wed_reset)
 	if (dev->dbdc_support || dev->phy.mt76->band_idx)
 		irq_mask |= MT_INT_BAND1_RX_DONE;
 #ifdef CONFIG_SOC_WOE
+#if defined(TCSUPPORT_CPU_AN7552)
+	if(woe_enable() && wed_reset && (mdev->slot_id == 1 || dev_dbdc))
+#else
 	if(woe_enable() && wed_reset)
+#endif
 	{
 		u32 wed_irq_mask = irq_mask;
 		wed_irq_mask |= MT_INT_TX_DONE_BAND0 | MT_INT_TX_DONE_BAND1;
@@ -432,7 +436,11 @@ int mt7915_dma_init(struct mt7915_dev *dev, struct mt7915_phy *phy2)
 	}
 #endif
 #ifdef CONFIG_SOC_WOE
+#if defined(TCSUPPORT_CPU_AN7552)
+	if(woe_enable() && (mdev->slot_id == 1 || dev_dbdc))
+#else
 	if(woe_enable())
+#endif
 	{
 		u8 wed_control_rx1 = is_mt7915(mdev) ? 1 : 2;
 		mt76_set(dev, MT_WFDMA_HOST_CONFIG, MT_WFDMA_HOST_CONFIG_WED);
@@ -528,7 +536,11 @@ int mt7915_dma_init(struct mt7915_dev *dev, struct mt7915_phy *phy2)
 	}
 #endif
 #ifdef CONFIG_SOC_WOE 
+#if defined(TCSUPPORT_CPU_AN7552)
+	if(is_mt7915(mdev) && woe_enable() && (mdev->slot_id == 1 || dev_dbdc))
+#else
 	if(is_mt7915(mdev) && woe_enable())
+#endif
 	{
 		wa_rx_base = MT_RXQ_MCU_WA_RING_BASE;
 		wa_rx_idx = MT7915_RXQ_MCU_WA;
@@ -571,8 +583,12 @@ int mt7915_dma_init(struct mt7915_dev *dev, struct mt7915_phy *phy2)
 	if (!is_mt7915(mdev)) {
 		wa_rx_base = MT_RXQ_RING_BASE(MT_RXQ_MAIN_WA);
 		wa_rx_idx = MT_RXQ_ID(MT_RXQ_MAIN_WA);
-#ifdef CONFIG_SOC_WOE 	
+#ifdef CONFIG_SOC_WOE
+#if defined(TCSUPPORT_CPU_AN7552)
+		if(woe_enable() && (mdev->slot_id == 1 || dev_dbdc))
+#else
 		if(woe_enable())
+#endif
 		{
 			mdev->q_rx[MT_RXQ_MAIN_WA].flags = MT_WED_Q_TXFREE;
 			if (is_mt7916(mdev)) {
@@ -750,7 +766,11 @@ int mt7915_dma_reset(struct mt7915_dev *dev, bool force)
 		register_rx_data_done_task(dev, 0);
 #endif
 #ifdef CONFIG_SOC_WOE
+#if defined(TCSUPPORT_CPU_AN7552)
+	if(woe_enable() && (mdev->slot_id == 1 || dev_dbdc) )
+#else
 	if(woe_enable())
+#endif
 	{		
 		if(mdev->slot_id == 0)
 			mt_wlan_hook_call(WLAN_HOOK_WOE_WDMA_RESET, &pAd, NULL);
@@ -771,7 +791,11 @@ int mt7915_dma_reset(struct mt7915_dev *dev, bool force)
 #endif
 
 #ifdef CONFIG_SOC_WOE
+#if defined(TCSUPPORT_CPU_AN7552)
+	if(woe_enable() && (mdev->slot_id == 1 || dev_dbdc))
+#else
 	if(woe_enable())
+#endif
 	{
 		if(mdev->slot_id == 0)
 			mt_wlan_hook_call(WLAN_HOOK_RING_RESET, &pAd, NULL);
@@ -817,7 +841,11 @@ int mt7915_dma_reset(struct mt7915_dev *dev, bool force)
 		mt76_rmw(dev, MT_WFDMA0_EXT0_CFG, MT_WFDMA0_EXT0_RXWB_KEEP,
 			 MT_WFDMA0_EXT0_RXWB_KEEP);
 #else
+#if defined(TCSUPPORT_CPU_AN7552)
+	if(woe_enable() && is_mt7915(&dev->mt76) && (mdev->slot_id == 1 || dev_dbdc))
+#else
 	if(woe_enable() && is_mt7915(&dev->mt76))
+#endif
 		mt76_rmw(dev, MT_WFDMA0_EXT0_CFG, MT_WFDMA0_EXT0_RXWB_KEEP,
 			 MT_WFDMA0_EXT0_RXWB_KEEP);		 
 #endif

@@ -557,12 +557,17 @@ enum mt7915_rdd_cmd {
 	RDD_IRQ_OFF,
 };
 
+extern int dev_dbdc;
 static inline bool
 mt7915_is_atf_default_on(struct wiphy *wiphy, struct mt7915_dev *dev)
 {
 	return ((!wiphy_ext_feature_isset(wiphy,
                 NL80211_EXT_FEATURE_AIRTIME_FAIRNESS)) ||
-                woe_enable());
+ #if defined(TCSUPPORT_CPU_AN7552)               
+                (woe_enable() && (dev->mt76.slot_id == 1 || dev_dbdc)));
+ #else
+				(woe_enable());
+ #endif
               //  mtk_wed_device_active(&dev->mt76.mmio.wed));
 }
 

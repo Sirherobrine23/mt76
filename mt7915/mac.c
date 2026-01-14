@@ -770,6 +770,7 @@ void mt7915_mac_write_txwi(struct mt76_dev *dev, __le32 *txwi,
 		mt7915_mac_write_txwi_tm(mphy->priv, txwi, skb);
 }
 
+extern int dev_dbdc;
 int mt7915_tx_prepare_skb(struct mt76_dev *mdev, void *txwi_ptr,
 			  enum mt76_txq_id qid, struct mt76_wcid *wcid,
 			  struct ieee80211_sta *sta,
@@ -871,8 +872,12 @@ int mt7915_tx_prepare_skb(struct mt76_dev *mdev, void *txwi_ptr,
 	tx_info->buf[1].skip_unmap = true;
 	tx_info->nbuf = MT_CT_DMA_BUF_NUM;
 		//WLAN_HOOK_CALL(WLAN_HOOK_TX, &pAd, &tx_info_woe);
-#ifdef CONFIG_SOC_WOE 	
+#ifdef CONFIG_SOC_WOE 
+#if defined(TCSUPPORT_CPU_AN7552)
+	if(woe_enable() && (mdev->slot_id == 1 || dev_dbdc))
+#else
 	if(woe_enable())
+#endif
 	{
 		if(mdev->slot_id == 0)
 			mt_wlan_hook_call(WLAN_HOOK_TX, &pAd, &tx_info_woe);
@@ -1092,6 +1097,10 @@ mt7915_mac_tx_free(struct mt7915_dev *dev, void *data, int len)
 			retries = u32_get_bits(info, MT_TX_FREE_TX_COUNT) - 1;
 
 		//if (!mtk_wed_device_active(&mdev->mmio.wed) && wcid)
+#if defined(TCSUPPORT_CPU_AN7552)		
+		if(!dev_dbdc && mdev->slot_id == 0 && wcid)
+			wcid->stats.tx_retries += retries;
+#endif		
 		if (!woe_enable() && wcid)
 			wcid->stats.tx_retries += retries;
 
@@ -1695,7 +1704,11 @@ void mt7915_mac_reset_work(struct work_struct *work)
 #else
 	struct mt76_dev *mdev = &dev->mt76;
 #ifdef CONFIG_SOC_WOE
+#if defined(TCSUPPORT_CPU_AN7552)
+	if(woe_enable() && (mdev->slot_id == 1 || dev_dbdc))
+#else
 	if(woe_enable())
+#endif
 	{
 		if(mdev->slot_id == 0)
 			mt_wlan_hook_call(WLAN_HOOK_WOE_STOP, &pAd, NULL);

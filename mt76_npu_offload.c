@@ -72,9 +72,14 @@ void wifi_offload_init_npu(struct pci_dev *pdev,struct mt7915_dev *dev,int flag)
 	if(npuOffloadEn){
 		printk("npuOffload on mt76 init \n");	
 		if (pdev->bus){
+#if defined(TCSUPPORT_CPU_EN7581) || defined(TCSUPPORT_CPU_AN7552)
+			band_idx = pci_domain_nr(pdev->bus);
+			mdev->slot_id = pci_domain_nr(pdev->bus);
+#else
 			band_idx = (pdev->bus->self->devfn >> 3) & 0x1f;	
 			printk("the value of pdev->bus->self->devfn is %d ,and the band_index is %d\n",pdev->bus->self->devfn,band_idx);
 			mdev->slot_id = (pdev->bus->self->devfn >> 3) & 0x1f;
+#endif
 		}
 		if(dev_dbdc)
 		{

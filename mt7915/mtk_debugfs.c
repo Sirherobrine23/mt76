@@ -673,6 +673,7 @@ dump_dma_rx_ring_info(struct seq_file *s, struct mt7915_dev *dev,  char *str, u3
 	seq_printf(s, "%20s %10x %10x %10x %10x %10x\n", str, base, cnt, cidx, didx, queue_cnt);
 }
 
+extern int dev_dbdc;
 static void
 mt7915_show_host_dma_info(struct seq_file *s, struct mt7915_dev *dev)
 {
@@ -746,7 +747,11 @@ mt7915_show_host_dma_info(struct seq_file *s, struct mt7915_dev *dev)
 	dump_dma_tx_ring_info(s, dev, "T16:FWDL", MT_DBG_TX_RING_CTRL(0));
 	dump_dma_tx_ring_info(s, dev, "T17:Cmd(H2WM)", MT_DBG_TX_RING_CTRL(1));
 	//if (mtk_wed_device_active(&dev->mt76.mmio.wed)) {
+#if defined(TCSUPPORT_CPU_AN7552) 
+	if(woe_enable() && (dev->mt76.slot_id == 1 || dev_dbdc)){
+#else
 	if(woe_enable()){
+#endif
 		dump_dma_tx_ring_info(s, dev, "T18:TXD0(H2WA)",  MT_DBG_WFDMA_WED_TX_CTRL(0));
 		dump_dma_tx_ring_info(s, dev, "T19:TXD1(H2WA)",  MT_DBG_WFDMA_WED_TX_CTRL(1));
 	} else {
@@ -756,7 +761,11 @@ mt7915_show_host_dma_info(struct seq_file *s, struct mt7915_dev *dev)
 	dump_dma_tx_ring_info(s, dev, "T20:Cmd(H2WA)", MT_DBG_TX_RING_CTRL(4));
 	dump_dma_rx_ring_info(s, dev, "R0:Event(WM2H)", MT_DBG_RX_EVENT_RING_CTRL(0));
 	//if (mtk_wed_device_active(&dev->mt76.mmio.wed))
+#if defined(TCSUPPORT_CPU_AN7552) 	
+	if(woe_enable() && (dev->mt76.slot_id == 1 || dev_dbdc))
+#else
 	if(woe_enable())
+#endif
 		dump_dma_rx_ring_info(s, dev, "R1:TxDone(WA2H)", MT_DBG_WFDMA_WED_RX_CTRL(1));
 	else
 		dump_dma_rx_ring_info(s, dev, "R1:Event0(WA2H)", MT_DBG_RX_EVENT_RING_CTRL(1));
