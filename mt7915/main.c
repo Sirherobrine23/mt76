@@ -778,8 +778,8 @@ int mt7915_mac_sta_add(struct mt76_dev *mdev, struct ieee80211_vif *vif,
 	else		
 		band = mphy->chandef.chan->band;
 	printk("%s:%d enter band=%d wcid=%d !!!!!\n",__func__,__LINE__,band,msta->wcid.idx);
-	WIFI_MAIL_API_SET_WAIT_ADD_DEL_STA(band, msta->wcid.idx); 
-
+	if(npu_enable())
+		WIFI_MAIL_API_SET_WAIT_ADD_DEL_STA(band, msta->wcid.idx); 
 #endif
 	return 0;
 }

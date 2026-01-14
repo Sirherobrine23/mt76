@@ -134,8 +134,8 @@ struct woe_need{
 #define  WED_TX1_CTRL1 (WED_REG_BASE + 0x00000314)
 #define  WED_TX1_CTRL2 (WED_REG_BASE + 0x00000318)
 #define  WED_TX1_CTRL3 (WED_REG_BASE + 0x0000031C)
-extern unsigned int wed_base_addr;
-extern unsigned int wed_base_addr_1;
+extern void __iomem *wed_base_addr;
+extern void __iomem *wed_base_addr_1;
 extern int woe_enable(void);
 extern void set_woe_enable(int enable);
 extern int mt_wlan_hook_call(unsigned short hook, void *ad, void *priv);

@@ -566,7 +566,7 @@ mt7915_is_atf_default_on(struct wiphy *wiphy, struct mt7915_dev *dev)
  #if defined(TCSUPPORT_CPU_AN7552)               
                 (woe_enable() && (dev->mt76.slot_id == 1 || dev_dbdc)));
  #else
-				(woe_enable());
+				(woe_enable()));
  #endif
               //  mtk_wed_device_active(&dev->mt76.mmio.wed));
 }
