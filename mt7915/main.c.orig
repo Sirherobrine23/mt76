@@ -1102,6 +1102,10 @@ static void mt7915_sta_statistics(struct ieee80211_hw *hw,
 	struct mt7915_sta *msta = (struct mt7915_sta *)sta->drv_priv;
 	struct rate_info *txrate = &msta->wcid.rate;
 	struct rate_info rxrate = {};
+#ifdef TX_RX_MT76_SPE_COUNTERS
+	struct mt76_phy *mphy = phy->mt76;
+	struct mt7915_dev *dev = phy->dev;
+#endif
 
 	if (is_mt7915(&phy->dev->mt76) &&
 	    !mt7915_mcu_get_rx_rate(phy, vif, sta, &rxrate)) {
@@ -1128,21 +1132,13 @@ static void mt7915_sta_statistics(struct ieee80211_hw *hw,
 	/* offloading flows bypass networking stack, so driver counts and
 	 * reports sta statistics via NL80211_STA_INFO when WED is active.
 	 */
+
 #if CONFIG_SOC_WOE
 	//if (mtk_wed_device_active(&phy->dev->mt76.mmio.wed)) {
 	if (woe_enable()) {
 		sinfo->tx_bytes = msta->wcid.stats.tx_bytes;
 		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_TX_BYTES64);
-		/*
-		sinfo->tx_packets = msta->wcid.stats.tx_packets;
-		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_TX_PACKETS);
-
-		sinfo->tx_failed = msta->wcid.stats.tx_failed;
-		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_TX_FAILED);
-
-		sinfo->tx_retries = msta->wcid.stats.tx_retries;
-		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_TX_RETRIES);
-		*/
+	
 		#if 0
 		if (mtk_wed_get_rx_capa(&phy->dev->mt76.mmio.wed)) {
 			sinfo->rx_bytes = msta->wcid.stats.rx_bytes;
@@ -1152,8 +1148,68 @@ static void mt7915_sta_statistics(struct ieee80211_hw *hw,
 			sinfo->filled |= BIT_ULL(NL80211_STA_INFO_RX_PACKETS);
 		}
 		#endif
+	
+#ifdef TX_RX_MT76_SPE_COUNTERS	
+
+		int sta_band=0;
+		if(dev->dbdc_support)	 
+			sta_band=msta->vif->mt76.band_idx;
+		else
+			 sta_band=mphy->chandef.chan->band;  
+
+
+		counter_t pcount;
+		int i =0;
+		WIFI_MAIL_API_GET_WAIT_COUNTER(sta_band, &pcount); 
+
+
+	
+		sinfo->rx_bytes = msta->wcid.stats.rx_bytes+pcount.rx_bytes_entry[msta->wcid.idx];
+		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_RX_BYTES64);
+		
+		sinfo->rx_packets = msta->wcid.stats.rx_packets+pcount.rx_pkts_entry[msta->wcid.idx];
+		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_RX_PACKETS);
+
+
+	sinfo->sta_rx_br = msta->wcid.stats.rx_br;
+	sinfo->filled |= BIT_ULL(NL80211_STA_INFO_RX_BROADCAST);
+
+	sinfo->sta_rx_mr = msta->wcid.stats.rx_mr;
+	sinfo->filled |= BIT_ULL(NL80211_STA_INFO_RX_MULTICAST);
+
+	sinfo->sta_rx_unicast= msta->wcid.stats.rx_packets+pcount.rx_pkts_entry[msta->wcid.idx]-msta->wcid.stats.rx_br-msta->wcid.stats.rx_mr;
+	sinfo->filled |= BIT_ULL(NL80211_STA_INFO_RX_UNICAST);	
+
+	sinfo->sta_rx_error= pcount.rx_error_entry[msta->wcid.idx];
+	sinfo->filled |= BIT_ULL(NL80211_STA_INFO_RX_ERROR);	
+	
+	sinfo->rx_dropped_misc= pcount.rx_dis_entry[msta->wcid.idx];
+	sinfo->filled |= BIT_ULL(NL80211_STA_INFO_RX_DROP_MISC);	
+
+
+    msta->vif->rx_errors += pcount.rx_error_entry[msta->wcid.idx];
+
+
+	msta->vif->tx_bytes += msta->wcid.stats.tx_bytes- msta->wcid.stats.tx_bytes_tem;
+
+	msta->vif->tx_packets += msta->wcid.stats.tx_packets- msta->wcid.stats.tx_packets_tem;
+
+	msta->vif->tx_errors += msta->wcid.stats.tx_failed- msta->wcid.stats.tx_error_tem;
+
+	msta->vif->tx_retry += msta->wcid.stats.tx_retries- msta->wcid.stats.tx_retries_tem;
+
+	msta->vif->tx_unicast += msta->wcid.stats.tx_packets- msta->wcid.stats.tx_packets_tem;
+
+		msta->wcid.stats.tx_bytes_tem=msta->wcid.stats.tx_bytes;
+		msta->wcid.stats.tx_packets_tem=msta->wcid.stats.tx_packets;
+		msta->wcid.stats.tx_error_tem=msta->wcid.stats.tx_failed;
+		msta->wcid.stats.tx_retries_tem=msta->wcid.stats.tx_retries;
+	//	}
+	
+#endif
 	}
 #endif
+	
 	sinfo->tx_retries = msta->wcid.stats.tx_retries;
 	sinfo->filled |= BIT_ULL(NL80211_STA_INFO_TX_RETRIES);
 
@@ -1173,7 +1229,86 @@ static void mt7915_sta_statistics(struct ieee80211_hw *hw,
 	sinfo->avg_ack_signal = -(s8)ewma_avg_signal_read(&msta->avg_ack_signal);
 	sinfo->filled |= BIT_ULL(NL80211_STA_INFO_ACK_SIGNAL_AVG);
 }
+#ifdef TX_RX_MT76_SPE_COUNTERS	
 
+
+static void mt7915_bss_statistics(struct ieee80211_hw *hw,
+				  struct ieee80211_vif *vif)
+{
+	struct mt7915_phy *phy = mt7915_hw_phy(hw);
+
+	struct rate_info rxrate = {};
+	struct mt76_phy *mphy = phy->mt76;
+	
+	struct mt7915_dev *dev = phy->dev;
+
+	
+#if CONFIG_SOC_WOE
+	//if (mtk_wed_device_active(&phy->dev->mt76.mmio.wed)) {
+	if (woe_enable()) {
+			
+			if (vif) {
+				struct mt7915_vif *mvif = (struct mt7915_vif *)vif->drv_priv;
+
+				int sta_band=0;
+				if(dev->dbdc_support)	 
+					sta_band=mvif->mt76.band_idx;
+				else
+					 sta_band=mphy->chandef.chan->band;  
+				
+				counter_t pcount;
+				int i =0;
+				WIFI_MAIL_API_GET_WAIT_COUNTER(sta_band, &pcount); 
+
+
+			int mvif_index=0;
+	
+			mvif_index=mvif->mt76.omac_idx==0?0:mvif->mt76.omac_idx-0x10;
+
+			if(sta_band==1){
+				mvif->rx_bytes=pcount.rxByteCount5G[mvif_index];
+				mvif->rx_packets=pcount.rxCount5G[mvif_index];
+				mvif->rx_drops=pcount.drop5Gcnt[mvif_index];
+
+			}else
+			{
+				mvif->rx_bytes=pcount.rxByteCount2G[mvif_index];
+				mvif->rx_packets=pcount.rxCount2G[mvif_index];
+				mvif->rx_drops=pcount.drop2Gcnt[mvif_index];
+			
+			}
+
+
+		mvif->rx_unicast=mvif->rx_packets-mvif->rx_br_cnt;
+
+		printk("bss_statistics========tx count broadcast is %llu \n",mvif->tx_br_cnt);		
+		printk("bss_statistics========tx count multicast is %llu \n",mvif->tx_mr_cnt);
+		printk("bss_statistics========tx count tx_bytes is %llu \n",mvif->tx_bytes);		
+		printk("bss_statistics========tx count tx_packets is %llu \n",mvif->tx_packets);
+		printk("bss_statistics========tx count tx_errors is %llu \n",mvif->tx_errors);		
+		printk("bss_statistics========tx count tx_retry is %llu \n",mvif->tx_retry);
+		printk("bss_statistics========tx count tx_unicast is %llu \n",mvif->tx_unicast);
+
+		printk("bss_statistics========rx count broadcast is %llu \n",mvif->rx_br_cnt);		
+		printk("bss_statistics========rx count multicast is %llu \n",mvif->rx_mr_cnt);
+		printk("bss_statistics========rx count rx_bytes is %llu \n",mvif->rx_bytes); 	
+		printk("bss_statistics========rx count rx_packets is %llu \n",mvif->rx_packets);
+		printk("bss_statistics========rx count rx_errors is %llu \n",mvif->rx_errors);		
+		printk("bss_statistics========rx count rx_retry is %llu \n",mvif->rx_drops);
+		printk("bss_statistics========rx count rx_unicast is %llu \n",mvif->rx_unicast);
+
+		}
+
+
+
+
+
+	}
+#endif
+
+		
+}
+#endif
 static void mt7915_sta_rc_work(void *data, struct ieee80211_sta *sta)
 {
 	struct mt7915_sta *msta = (struct mt7915_sta *)sta->drv_priv;
@@ -1715,5 +1850,7 @@ const struct ieee80211_ops mt7915_ops = {
 	.net_fill_receive_path = mt7915_net_fill_receive_path,
 	.net_setup_tc = mt7915_net_setup_tc,
 #endif
-
+#ifdef TX_RX_MT76_SPE_COUNTERS	
+    .bss_statistics = mt7915_bss_statistics,
+#endif	
 };
