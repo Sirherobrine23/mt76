@@ -28,13 +28,17 @@ void npu_init_rxD(struct mt7915_dev *dev,struct pci_dev *pdev)
 	unsigned char band_idx = 0;
 	if (pdev->bus)
 		band_idx = (pdev->bus->self->devfn >> 3) & 0x1f;
-	if(dev_dbdc)
-		band_idx = 0;
-	isMailBoxSuccess = WIFI_MAIL_API_SET_WAIT_DESC(band_idx, ring_size);
-	if(isMailBoxSuccess != 1)
-		printk("Error: NPU_WIFI_OFFLOAD Set RXD ring size fail\n");
-	if(dev_dbdc)
+	if(!dev_dbdc)
 	{
+		isMailBoxSuccess = WIFI_MAIL_API_SET_WAIT_DESC(band_idx, ring_size);
+		if(isMailBoxSuccess != 1)
+			printk("Error: NPU_WIFI_OFFLOAD Set RXD ring size fail\n");	
+	}
+	else if(dev_dbdc)
+	{
+		isMailBoxSuccess = WIFI_MAIL_API_SET_WAIT_DESC(0, ring_size);
+		if(isMailBoxSuccess != 1)
+			printk("Error: NPU_WIFI_OFFLOAD Set RXD ring size fail\n");
 		isMailBoxSuccess = WIFI_MAIL_API_SET_WAIT_DESC(1, ring_size);
 		if(isMailBoxSuccess != 1)
 			printk("Error: NPU_WIFI_OFFLOAD Set RXD ring size fail\n");
@@ -78,7 +82,10 @@ void wifi_offload_init_npu(struct pci_dev *pdev,struct mt7915_dev *dev,int flag)
 				isMailBoxSuccess = WIFI_MAIL_API_SET_WAIT_DRIVER_MODEL(band_idx, MT7916_D);
 				if(isMailBoxSuccess != 1) 
 					printk("Error: 7915D 111 NPU_WIFI_OFFLOAD Set Dirver Model Fail\n");
-				isMailBoxSuccess = WIFI_MAIL_API_SET_WAIT_PCIE_PORT_TYPE(band_idx, P0__P0);
+				if(mdev->slot_id)
+					isMailBoxSuccess = WIFI_MAIL_API_SET_WAIT_PCIE_PORT_TYPE(band_idx, P0__P1);
+				else
+					isMailBoxSuccess = WIFI_MAIL_API_SET_WAIT_PCIE_PORT_TYPE(band_idx, P0__P0);
 				if(isMailBoxSuccess != 1) 
 					printk("Error: 7915A NPU_WIFI_OFFLOAD Set PCIE PORT Fail\n");	
 			}
@@ -198,20 +205,27 @@ void get_npu_rxd(struct mt7915_dev *dev,struct pci_dev *pdev)
 	void __iomem *npu_regs;
 	if (pdev->bus)
 		band_idx = (pdev->bus->self->devfn >> 3) & 0x1f;
-	if(dev_dbdc)
-		band_idx = 0;
-	isMailBoxSuccess = WIFI_MAIL_API_GET_WAIT_RXDESC_BASE(band_idx, &get_RingBase_2g);
-	if(isMailBoxSuccess != 1) 
-		printk("Error: NPU_WIFI_OFFLOAD get ring0 base fail\n");
-	npu_regs=(NDIS_PHYSICAL_ADDRESS)get_RingBase_2g.info;
-	writel(npu_regs,&dev->mt76.q_rx[MT_RXQ_MAIN].regs->desc_base);
-	if(dev_dbdc)
-	{	
+	if(!dev_dbdc)
+	{
+		isMailBoxSuccess = WIFI_MAIL_API_GET_WAIT_RXDESC_BASE(band_idx, &get_RingBase_2g);
+		if(isMailBoxSuccess != 1) 
+			printk("Error: NPU_WIFI_OFFLOAD get ring0 base fail\n");
+		npu_regs=(NDIS_PHYSICAL_ADDRESS)get_RingBase_2g.info;
+		writel(npu_regs,&dev->mt76.q_rx[MT_RXQ_MAIN].regs->desc_base);	
+	}
+	else if(dev_dbdc)
+	{
+		isMailBoxSuccess = WIFI_MAIL_API_GET_WAIT_RXDESC_BASE(0, &get_RingBase_2g);
+		if(isMailBoxSuccess != 1) 
+			printk("Error: NPU_WIFI_OFFLOAD get ring0 base fail\n");
+		npu_regs=(NDIS_PHYSICAL_ADDRESS)get_RingBase_2g.info;
+		writel(npu_regs,&dev->mt76.q_rx[MT_RXQ_MAIN].regs->desc_base);
+		
 		isMailBoxSuccess = WIFI_MAIL_API_GET_WAIT_RXDESC_BASE(1, &get_RingBase_5g);
 		if(isMailBoxSuccess != 1) 
 			printk("Error: NPU_WIFI_OFFLOAD get ring1 base fail\n");
 		npu_regs=(NDIS_PHYSICAL_ADDRESS)get_RingBase_5g.info;
-		writel(npu_regs,&dev->mt76.q_rx[MT_RXQ_BAND1].regs->desc_base);
+		writel(npu_regs,&dev->mt76.q_rx[MT_RXQ_BAND1].regs->desc_base);			
 	}
 }
 EXPORT_SYMBOL_GPL(get_npu_rxd);
