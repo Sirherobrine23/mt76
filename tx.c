@@ -526,11 +526,12 @@ mt76_txq_schedule_list(struct mt76_phy *phy, enum mt76_txq_id qid)
 		if (test_bit(MT76_RESET, &phy->state))
 			return -EBUSY;
 
+		/*
 		if (dev->queue_ops->tx_cleanup &&
 		    q->queued + 2 * MT_TXQ_FREE_THR >= q->ndesc) {
 			dev->queue_ops->tx_cleanup(dev, q, false);
 		}
-
+		*/
 		txq = ieee80211_next_txq(phy->hw, qid);
 		if (!txq)
 			break;
