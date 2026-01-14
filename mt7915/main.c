@@ -762,7 +762,17 @@ int mt7915_mac_sta_add(struct mt76_dev *mdev, struct ieee80211_vif *vif,
 		mt7915_mcu_set_vow_drr_ctrl(dev, msta, VOW_DRR_STA_PAUSE_SETTING);
 		mt7915_mcu_set_vow_drr_ctrl(dev, msta, VOW_DRR_STA_ALL);
 	}
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD		
+	struct mt76_phy *mphy = &dev->mt76.phy;
+	u8 band;
+	if(dev->dbdc_support)		
+		band = msta->vif->mt76.band_idx;	
+	else		
+		band = mphy->chandef.chan->band;
+	printk("%s:%d enter band=%d wcid=%d !!!!!\n",__func__,__LINE__,band,msta->wcid.idx);
+	WIFI_MAIL_API_SET_WAIT_ADD_DEL_STA(band, msta->wcid.idx); 
 
+#endif
 	return 0;
 }
 
