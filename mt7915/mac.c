@@ -537,7 +537,8 @@ mt7915_mac_fill_rx(struct mt7915_dev *dev, struct sk_buff *skb,
 			if (IS_BROADCAST_MAC_ADDR(hdr->addr1))
 			{			
 				msta1=container_of(mt7915_rx_get_wcid(dev, idx, 1), struct mt7915_sta, wcid);
-				msta1->wcid.stats.rx_br++;
+				if (msta1)
+					msta1->wcid.stats.rx_br++;
 
 			    if(msta1 && msta1->vif){
 			       msta1->vif->rx_br_cnt++;
@@ -549,7 +550,8 @@ mt7915_mac_fill_rx(struct mt7915_dev *dev, struct sk_buff *skb,
 
   	 		if(IS_MULTICAST_MAC_ADDR(hdr->addr1)){
 				msta1=container_of(mt7915_rx_get_wcid(dev, idx, 1), struct mt7915_sta, wcid);
-				msta1->wcid.stats.rx_mr++;
+				if (msta1)
+					msta1->wcid.stats.rx_mr++;
 				if(msta){
 					msta->wcid.stats.rx_mr++;
 	       	    }
