@@ -86,11 +86,12 @@ static ssize_t mt7915_thermal_temp_store(struct device *dev,
 	val = clamp_val(DIV_ROUND_CLOSEST(val, 1000), 60, 130);
 
 	if ((i - 1 == MT7915_CRIT_TEMP_IDX &&
-	     val > phy->throttle_temp[MT7915_MAX_TEMP_IDX]) ||
+	     val > (phy->throttle_temp[MT7915_MAX_TEMP_IDX] - 10)) ||
 	    (i - 1 == MT7915_MAX_TEMP_IDX &&
-	     val < phy->throttle_temp[MT7915_CRIT_TEMP_IDX])) {
+	     (val -10) < phy->throttle_temp[MT7915_CRIT_TEMP_IDX])) {
 		dev_err(phy->dev->mt76.dev,
-			"temp1_max shall be greater than temp1_crit.");
+			"temp1_max shall be 10 degrees greater than temp1_crit.");
+		mutex_unlock(&phy->dev->mt76.mutex);
 		return -EINVAL;
 	}
 
