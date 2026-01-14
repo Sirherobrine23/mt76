@@ -5,6 +5,9 @@
 
 #include "mt76.h"
 #include "trace.h"
+#ifdef CONFIG_SOC_WOE 
+#include "mt76_woe.h"
+#endif
 
 static u32 mt76_mmio_rr(struct mt76_dev *dev, u32 offset)
 {
@@ -74,10 +77,18 @@ void mt76_set_irq_mask(struct mt76_dev *dev, u32 addr,
 	dev->mmio.irqmask &= ~clear;
 	dev->mmio.irqmask |= set;
 	if (addr) {
+#if 0
 		if (mtk_wed_device_active(&dev->mmio.wed))
 			mtk_wed_device_irq_set_mask(&dev->mmio.wed,
 						    dev->mmio.irqmask);
 		else
+			mt76_mmio_wr(dev, addr, dev->mmio.irqmask);
+#endif
+#ifdef CONFIG_SOC_WOE 
+		if(woe_enable())
+			mtk_wed_irq_set_mask_woe(dev, dev->mmio.irqmask);
+		else
+#endif
 			mt76_mmio_wr(dev, addr, dev->mmio.irqmask);
 	}
 	spin_unlock_irqrestore(&dev->mmio.irq_lock, flags);

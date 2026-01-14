@@ -1342,9 +1342,11 @@ void mt76_rx_poll_complete(struct mt76_dev *dev, enum mt76_rxq_id q,
 
 	while ((skb = __skb_dequeue(&dev->rx_skb[q])) != NULL) {
 		mt76_check_sta(dev, skb);
+#if 0
 		if (mtk_wed_device_active(&dev->mmio.wed))
 			__skb_queue_tail(&frames, skb);
 		else
+#endif
 			mt76_rx_aggr_reorder(skb, &frames);
 	}
 

@@ -1218,8 +1218,10 @@ static int mt7986_wmac_probe(struct platform_device *pdev)
 free_irq:
 	devm_free_irq(mdev->dev, irq, dev);
 free_device:
+#if 0
 	if (mtk_wed_device_active(&mdev->mmio.wed))
 		mtk_wed_device_detach(&mdev->mmio.wed);
+#endif
 	mt76_free_device(mdev);
 
 	return ret;

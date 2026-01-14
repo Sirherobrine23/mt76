@@ -6,6 +6,10 @@
 #include "eeprom.h"
 
 #ifdef MTK_DEBUG
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD
+#include "../mt76_npu_offload.h"
+#endif
+
 #define LWTBL_IDX2BASE_ID		GENMASK(14, 8)
 #define LWTBL_IDX2BASE_DW		GENMASK(7, 2)
 #define LWTBL_IDX2BASE(_id, _dw)	(MT_DBG_WTBL_BASE | \
@@ -857,7 +861,8 @@ mt7986_show_host_dma_info(struct seq_file *s, struct mt7915_dev *dev)
 	dump_dma_tx_ring_info(s, dev, "T16:FWDL", MT_DBG_TX_RING_CTRL(0));
 	dump_dma_tx_ring_info(s, dev, "T17:Cmd(H2WM)",	MT_DBG_TX_RING_CTRL(1));
 
-	if (is_mt7916(&dev->mt76) && mtk_wed_device_active(&dev->mt76.mmio.wed)) {
+	//if (is_mt7916(&dev->mt76) && mtk_wed_device_active(&dev->mt76.mmio.wed)) {
+	if (is_mt7916(&dev->mt76) && woe_enable()) {
 		dump_dma_tx_ring_info(s, dev, "T18:TXD0(H2WA)",  MT_DBG_WFDMA_WED_TX_CTRL(0));
 		dump_dma_tx_ring_info(s, dev, "T19:TXD1(H2WA)",  MT_DBG_WFDMA_WED_TX_CTRL(1));
 	} else {
@@ -868,7 +873,8 @@ mt7986_show_host_dma_info(struct seq_file *s, struct mt7915_dev *dev)
 	dump_dma_tx_ring_info(s, dev, "T20:Cmd(H2WA)",	MT_DBG_TX_RING_CTRL(4));
 	dump_dma_rx_ring_info(s, dev, "R0:Event(WM2H)", MT_DBG_RX_DATA_RING_CTRL(0));
 	dump_dma_rx_ring_info(s, dev, "R1:Event(WA2H)", MT_DBG_RX_EVENT_RING_CTRL(1));
-	if (is_mt7916(&dev->mt76) && mtk_wed_device_active(&dev->mt76.mmio.wed))
+	//if (is_mt7916(&dev->mt76) && mtk_wed_device_active(&dev->mt76.mmio.wed))
+	if (is_mt7916(&dev->mt76) && woe_enable())
 		dump_dma_rx_ring_info(s, dev, "R2:TxDone(WA2H)", MT_DBG_WFDMA_WED_RX_CTRL(1));
 	else
 		dump_dma_rx_ring_info(s, dev, "R2:TxDone(WA2H)", MT_DBG_RX_EVENT_RING_CTRL(2));
@@ -3207,7 +3213,10 @@ int mt7915_mtk_init_debugfs(struct mt7915_phy *phy, struct dentry *dir)
 
 	debugfs_create_devm_seqfile(dev->mt76.dev, "fw_version", dir,
 				    mt7915_dump_version);
-
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD	
+	debugfs_create_devm_seqfile(dev->mt76.dev, "npu_count", dir,
+					mt7915_npu_count);	
+#endif
 	debugfs_create_devm_seqfile(dev->mt76.dev, "eeprom_mode", dir,
 				    mt7915_show_eeprom_mode);
 	debugfs_create_file("sw_aci", 0600, dir, dev,

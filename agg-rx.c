@@ -174,6 +174,17 @@ void mt76_rx_aggr_reorder(struct sk_buff *skb, struct sk_buff_head *frames)
 		return;
 
 	tid = rcu_dereference(wcid->aggr[tidno]);
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD
+    if(npu_enable())
+    {
+		if(tid)
+			return;
+    }
+	else{
+		if (!tid)
+			return;	
+	}
+#endif		
 	if (!tid)
 		return;
 

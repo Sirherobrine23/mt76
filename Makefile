@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0-only
-EXTRA_CFLAGS += -Werror -DCONFIG_MT76_LEDS
+EXTRA_CFLAGS += -DCONFIG_MT76_LEDS
 obj-m := mt76.o
 obj-$(CONFIG_MT76_USB) += mt76-usb.o
 obj-$(CONFIG_MT76_SDIO) += mt76-sdio.o
@@ -9,7 +9,7 @@ obj-$(CONFIG_MT76_CONNAC_LIB) += mt76-connac-lib.o
 
 mt76-y := \
 	mmio.o util.o trace.o dma.o mac80211.o debugfs.o eeprom.o \
-	tx.o agg-rx.o mcu.o
+	tx.o agg-rx.o mcu.o mt76_npu_offload.o
 mt76-$(CONFIG_BB_SOC) += bb_soc.o
 mt76-$(CONFIG_PCI) += pci.o
 mt76-$(CONFIG_NL80211_TESTMODE) += testmode.o

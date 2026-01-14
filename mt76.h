@@ -13,7 +13,7 @@
 #include <linux/leds.h>
 #include <linux/usb.h>
 #include <linux/average.h>
-#include <linux/soc/mediatek/mtk_wed.h>
+//#include <linux/soc/mediatek/mtk_wed.h>
 #include <net/mac80211.h>
 #include <linux/pci.h>
 #include "util.h"
@@ -604,8 +604,9 @@ struct mt76_mmio {
 	void __iomem *regs;
 	spinlock_t irq_lock;
 	u32 irqmask;
-
+#if 0
 	struct mtk_wed_device wed;
+#endif
 };
 
 struct mt76_rx_status {
@@ -913,6 +914,9 @@ struct mt76_dev {
 	struct mt76_connac2_fw_trailer *wm_hdr;
 	struct mt76_connac2_fw_trailer *wa_hdr;
 	const char *bin_file_name;
+#if defined(CONFIG_SOC_WOE) || defined(TCSUPPORT_NPU_WIFI_OFFLOAD)
+	u32 slot_id;
+#endif	
 };
 
 struct mt76_power_limits {

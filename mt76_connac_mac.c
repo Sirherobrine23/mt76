@@ -4,6 +4,7 @@
 #include "mt76_connac.h"
 #include "mt76_connac2_mac.h"
 #include "dma.h"
+#include "mt76_woe.h"
 
 #define HE_BITS(f)		cpu_to_le16(IEEE80211_RADIOTAP_HE_##f)
 #define HE_PREP(f, m, v)	le16_encode_bits(le32_get_bits(v, MT_CRXV_HE_##m),\
@@ -255,6 +256,13 @@ int mt76_connac_init_tx_queues(struct mt76_phy *phy, int idx, int n_desc,
 			       int ring_base, u32 flags)
 {
 	int i, err;
+#ifdef CONFIG_SOC_WOE 
+	if(woe_enable())
+	{
+		if(idx == TX_QUEUE0_INDEX || idx == TX_QUEUE1_INDEX)
+			ring_base = 0xd7300;
+	}
+#endif
 
 	err = mt76_init_tx_queue(phy, 0, idx, n_desc, ring_base, flags);
 	if (err < 0)

@@ -6,6 +6,45 @@
 #include <linux/dma-mapping.h>
 #include "mt76.h"
 #include "dma.h"
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD
+#include "mt76_npu_offload.h"
+extern struct sk_buff *(*fromHostadptPktHandle_hook)(unsigned int ringIdx, unsigned char* preschedule);
+extern void (*hostdapt_enable_int_hook)(unsigned int ringIdx);
+extern void (*hostdapt_disable_int_hook)(unsigned int ringIdx);
+extern void (*hostdapt_registe_wifitask_hook)(unsigned int ringIdx, void *func);
+#endif
+
+#ifdef CONFIG_SOC_WOE 
+#include "mt7915/regs.h"
+#include "mt76_woe.h"
+
+void 
+writel_mt76(unsigned int value, void *addr,struct mt76_queue *q){
+	writel(value, addr);
+}
+int 
+readl_mt76(void *addr, struct mt76_queue *q){
+	return readl(addr);
+}
+
+struct woe_need pAd = {
+	.writel_api = writel_mt76,
+	.readl_api = readl_mt76,	
+	.regs_phy0 = NULL,
+	.regs_phy1 = NULL,
+	.wed_running = 0,
+};
+struct woe_need pAd_1 = {
+	.writel_api = writel_mt76,
+	.readl_api = readl_mt76,	
+	.regs_phy0 = NULL,
+	.regs_phy1 = NULL,
+	.wed_running = 0,
+};
+EXPORT_SYMBOL(pAd);
+EXPORT_SYMBOL(pAd_1);
+#endif
+
 
 #if IS_ENABLED(CONFIG_NET_MEDIATEK_SOC_WED)
 
@@ -209,6 +248,68 @@ mt76_dma_queue_reset(struct mt76_dev *dev, struct mt76_queue *q)
 static int
 mt76_dma_add_buf(struct mt76_dev *dev, struct mt76_queue *q,
 		 struct mt76_queue_buf *buf, int nbufs, u32 info,
+		 struct sk_buff *skb, void *txwi)
+{
+	struct mt76_queue_entry *entry;
+	struct mt76_desc *desc;
+	u32 ctrl;
+	int i, idx = -1;
+
+	if (txwi) {
+		q->entry[q->head].txwi = DMA_DUMMY_DATA;
+		q->entry[q->head].skip_buf0 = true;
+	}
+
+	for (i = 0; i < nbufs; i += 2, buf += 2) {
+		u32 buf0 = buf[0].addr, buf1 = 0;
+
+		idx = q->head;
+		q->head = (q->head + 1) % q->ndesc;
+
+		desc = &q->desc[idx];
+		entry = &q->entry[idx];
+
+		if (buf[0].skip_unmap)
+			entry->skip_buf0 = true;
+		entry->skip_buf1 = i == nbufs - 1;
+
+		entry->dma_addr[0] = buf[0].addr;
+		entry->dma_len[0] = buf[0].len;
+
+		ctrl = FIELD_PREP(MT_DMA_CTL_SD_LEN0, buf[0].len);
+		if (i < nbufs - 1) {
+			entry->dma_addr[1] = buf[1].addr;
+			entry->dma_len[1] = buf[1].len;
+			buf1 = buf[1].addr;
+			ctrl |= FIELD_PREP(MT_DMA_CTL_SD_LEN1, buf[1].len);
+			if (buf[1].skip_unmap)
+				entry->skip_buf1 = true;
+		}
+
+		if (i == nbufs - 1)
+			ctrl |= MT_DMA_CTL_LAST_SEC0;
+		else if (i == nbufs - 2)
+			ctrl |= MT_DMA_CTL_LAST_SEC1;
+
+		WRITE_ONCE(desc->buf0, cpu_to_le32(buf0));
+		WRITE_ONCE(desc->buf1, cpu_to_le32(buf1));
+		WRITE_ONCE(desc->info, cpu_to_le32(info));
+		WRITE_ONCE(desc->ctrl, cpu_to_le32(ctrl));
+
+		q->queued++;
+	}
+
+	q->entry[idx].txwi = txwi;
+	q->entry[idx].skb = skb;
+	q->entry[idx].wcid = 0xffff;
+
+	return idx;
+}
+
+#if 0
+static int
+mt76_dma_add_buf(struct mt76_dev *dev, struct mt76_queue *q,
+		 struct mt76_queue_buf *buf, int nbufs, u32 info,
 		 struct sk_buff *skb, void *txwi, void *rxwi)
 {
 	struct mt76_queue_entry *entry;
@@ -286,7 +387,7 @@ mt76_dma_add_buf(struct mt76_dev *dev, struct mt76_queue *q,
 
 	return idx;
 }
-
+#endif
 static void
 mt76_dma_tx_cleanup_idx(struct mt76_dev *dev, struct mt76_queue *q, int idx,
 			struct mt76_queue_entry *prev_e)
@@ -315,7 +416,32 @@ static void
 mt76_dma_kick_queue(struct mt76_dev *dev, struct mt76_queue *q)
 {
 	wmb();
-	Q_WRITE(dev, q, cpu_idx, q->head);
+#ifdef CONFIG_SOC_WOE 
+	if(woe_enable())
+	{
+		if(dev->slot_id == 0)
+		{
+			if(q->hw_idx == TX_QUEUE0_INDEX || q->hw_idx == TX_QUEUE1_INDEX)
+				pAd.writel_api(q->head, &q->regs->cpu_idx, q);
+			else if(q->hw_idx == 1 && ((q->flags) & MT_QFLAG_WED))
+				writel(q->head, (void *)(wed_base_addr + WED_RX1_CTRL0 + 8));
+			else
+				writel(q->head, &q->regs->cpu_idx);
+		}
+		else
+		{
+			if(q->hw_idx == TX_QUEUE0_INDEX || q->hw_idx == TX_QUEUE1_INDEX)
+				pAd_1.writel_api(q->head, &q->regs->cpu_idx, q);
+			else if(q->hw_idx == 1 && ((q->flags) & MT_QFLAG_WED))
+				writel(q->head, (void *)(wed_base_addr_1 + WED_RX1_CTRL0 + 8));
+			else
+				writel(q->head, &q->regs->cpu_idx); 		
+		}
+	}
+	else
+#endif
+		writel(q->head, &q->regs->cpu_idx); 
+	//Q_WRITE(dev, q, cpu_idx, q->head);
 }
 
 static void
@@ -331,7 +457,17 @@ mt76_dma_tx_cleanup(struct mt76_dev *dev, struct mt76_queue *q, bool flush)
 	if (flush)
 		last = -1;
 	else
-		last = Q_READ(dev, q, dma_idx);
+	{
+#ifdef CONFIG_SOC_WOE 
+		if(woe_enable())
+			last = woe_read_1(dev, q);	
+		else
+			last = readl(&q->regs->dma_idx);
+#else
+		last = readl(&q->regs->dma_idx);
+#endif	
+	}
+
 
 	while (q->queued > 0 && q->tail != last) {
 		mt76_dma_tx_cleanup_idx(dev, q, q->tail, &entry);
@@ -343,7 +479,17 @@ mt76_dma_tx_cleanup(struct mt76_dev *dev, struct mt76_queue *q, bool flush)
 		}
 
 		if (!flush && q->tail == last)
-			last = Q_READ(dev, q, dma_idx);
+		{
+#ifdef CONFIG_SOC_WOE 			
+		if(woe_enable())
+			last = woe_read_1(dev, q);
+		else
+			last = readl(&q->regs->dma_idx);
+#else
+			last = readl(&q->regs->dma_idx);
+#endif		
+		}
+
 	}
 	spin_unlock_bh(&q->cleanup_lock);
 
@@ -482,7 +628,7 @@ mt76_dma_tx_queue_skb_raw(struct mt76_dev *dev, struct mt76_queue *q,
 	buf.len = skb->len;
 
 	spin_lock_bh(&q->lock);
-	mt76_dma_add_buf(dev, q, &buf, 1, tx_info, skb, NULL, NULL);
+	mt76_dma_add_buf(dev, q, &buf, 1, tx_info, skb, NULL);
 	mt76_dma_kick_queue(dev, q);
 	spin_unlock_bh(&q->lock);
 
@@ -559,7 +705,8 @@ mt76_dma_tx_queue_skb(struct mt76_dev *dev, struct mt76_queue *q,
 		goto unmap;
 
 	return mt76_dma_add_buf(dev, q, tx_info.buf, tx_info.nbuf,
-				tx_info.info, tx_info.skb, t, NULL);
+				tx_info.info, tx_info.skb, t);
+
 
 unmap:
 	for (n--; n > 0; n--)
@@ -585,7 +732,48 @@ free_skb:
 
 	return ret;
 }
+int
+mt76_dma_rx_fill(struct mt76_dev *dev, struct mt76_queue *q)
+{
+	dma_addr_t addr;
+	void *buf;
+	int frames = 0;
+	int len = SKB_WITH_OVERHEAD(q->buf_size);
+	int offset = q->buf_offset;
 
+	if (!q->ndesc)
+		return 0;
+
+	spin_lock_bh(&q->lock);
+
+	while (q->queued < q->ndesc - 1) {
+		struct mt76_queue_buf qbuf;
+
+		buf = page_frag_alloc(&q->rx_page, q->buf_size, GFP_ATOMIC);
+		if (!buf)
+			break;
+
+		addr = dma_map_single(dev->dev, buf, len, DMA_FROM_DEVICE);
+		if (unlikely(dma_mapping_error(dev->dev, addr))) {
+			skb_free_frag(buf);
+			break;
+		}
+
+		qbuf.addr = addr + offset;
+		qbuf.len = len - offset;
+		mt76_dma_add_buf(dev, q, &qbuf, 1, 0, buf, NULL);
+		frames++;
+	}
+
+	if (frames)
+		mt76_dma_kick_queue(dev, q);
+
+	spin_unlock_bh(&q->lock);
+
+	return frames;
+}
+
+#if 0
 static int
 mt76_dma_rx_fill(struct mt76_dev *dev, struct mt76_queue *q)
 {
@@ -650,7 +838,8 @@ mt76_dma_rx_fill(struct mt76_dev *dev, struct mt76_queue *q)
 
 	return frames;
 }
-
+#endif
+#if 0
 int
 mt76_dma_wed_setup(struct mt76_dev *dev, struct mt76_queue *q, bool reset)
 {
@@ -704,6 +893,44 @@ mt76_dma_wed_setup(struct mt76_dev *dev, struct mt76_queue *q, bool reset)
 #endif
 }
 EXPORT_SYMBOL_GPL(mt76_dma_wed_setup);
+#endif
+
+#ifdef CONFIG_SOC_WOE
+static int
+mt76_dma_wed_setup(struct mt76_dev *dev, struct mt76_queue *q, bool reset)
+{
+	//struct mtk_wed_device *wed = &dev->mmio.wed;
+	int ret, type, ring, i;
+	u8 flags = q->flags;
+	type = FIELD_GET(MT_QFLAG_WED_TYPE, q->flags);
+	ring = FIELD_GET(MT_QFLAG_WED_RING, q->flags);
+	switch (type) {
+	case MT76_WED_Q_TXFREE:
+		/* WED txfree queue needs ring to be initialized before setup */
+		q->flags = 0;
+		for (i = 0; i < q->ndesc; i++)
+			q->desc[i].ctrl = cpu_to_le32(MT_DMA_CTL_DMA_DONE);
+		writel(0, &q->regs->cpu_idx);
+		writel(0, &q->regs->dma_idx);
+		writel(q->desc_dma, &q->regs->desc_base);
+		writel(q->ndesc, &q->regs->ring_size);
+		q->head = readl(&q->regs->dma_idx);
+		q->tail = q->head;	
+		mt76_dma_rx_fill(dev, q);
+		q->flags = flags;
+#ifdef 	CONFIG_SOC_WOE	
+		q->wed_regs = WED_RX1_CTRL0;
+		ret = mtk_wed_device_txfree_ring_setup(dev, q->regs);
+#endif
+		break;
+	default:
+		ret = 0;
+	}
+
+	return ret;
+}
+#endif
+
 
 static int
 mt76_dma_alloc_queue(struct mt76_dev *dev, struct mt76_queue *q,
@@ -715,7 +942,21 @@ mt76_dma_alloc_queue(struct mt76_dev *dev, struct mt76_queue *q,
 	spin_lock_init(&q->lock);
 	spin_lock_init(&q->cleanup_lock);
 
+#ifdef CONFIG_SOC_WOE 	
+	/*tx queue0 & tx queue1*/
+	if(woe_enable())
+	{
+		if(idx == TX_QUEUE0_INDEX || idx == TX_QUEUE1_INDEX)
+			q->regs = dev->mmio.regs + ring_base + (idx - TX_QUEUE0_INDEX) * MT_RING_SIZE;
+		else
+			q->regs = dev->mmio.regs + ring_base + idx * MT_RING_SIZE;
+	}
+	else
+		q->regs = dev->mmio.regs + ring_base + idx * MT_RING_SIZE;
+#else
 	q->regs = dev->mmio.regs + ring_base + idx * MT_RING_SIZE;
+#endif
+
 	q->ndesc = n_desc;
 	q->buf_size = bufsize;
 	q->hw_idx = idx;
@@ -730,12 +971,27 @@ mt76_dma_alloc_queue(struct mt76_dev *dev, struct mt76_queue *q,
 	if (!q->entry)
 		return -ENOMEM;
 
-	ret = mt76_dma_wed_setup(dev, q, false);
-	if (ret)
-		return ret;
-
-	if (q->flags != MT_WED_Q_TXFREE)
+#ifdef CONFIG_SOC_WOE
+	/*tx queue0 & queue1*/
+	if(woe_enable())
+	{
+		if(idx == TX_QUEUE0_INDEX || idx == TX_QUEUE1_INDEX)
+			mt76_dma_queue_reset_woe(dev, q);
+		else
+		{
+			if (q->flags != MT_WED_Q_TXFREE)
+				mt76_dma_queue_reset(dev, q);
+		}
+		ret = mt76_dma_wed_setup(dev, q, false);
+		if(ret)
+			return ret;
+	}
+	else
 		mt76_dma_queue_reset(dev, q);
+#else
+
+		mt76_dma_queue_reset(dev, q);
+#endif
 
 	return 0;
 }
@@ -783,20 +1039,32 @@ mt76_dma_rx_reset(struct mt76_dev *dev, enum mt76_rxq_id qid)
 		q->desc[i].ctrl = cpu_to_le32(MT_DMA_CTL_DMA_DONE);
 
 	mt76_dma_rx_cleanup(dev, q);
+#ifdef CONFIG_SOC_WOE
+	if(woe_enable())
+	{
+		mt76_dma_wed_setup(dev, q, true);
 
-	mt76_dma_wed_setup(dev, q, true);
-
-	if (q->flags != MT_WED_Q_TXFREE) {
+		if (q->flags != MT_WED_Q_TXFREE) {
+			mt76_dma_sync_idx(dev, q);
+			mt76_dma_rx_fill(dev, q);
+		}
+	}
+	else
+	{
 		mt76_dma_sync_idx(dev, q);
 		mt76_dma_rx_fill(dev, q);
 	}
-
+#else
+	mt76_dma_sync_idx(dev, q);
+	mt76_dma_rx_fill(dev, q);
+#endif
 	if (!q->rx_head)
 		return;
 
 	dev_kfree_skb(q->rx_head);
 	q->rx_head = NULL;
 }
+
 
 static void
 mt76_add_fragment(struct mt76_dev *dev, struct mt76_queue *q, void *data,
@@ -828,22 +1096,41 @@ mt76_add_fragment(struct mt76_dev *dev, struct mt76_queue *q, void *data,
 static int
 mt76_dma_rx_process(struct mt76_dev *dev, struct mt76_queue *q, int budget)
 {
-	int len, data_len, done = 0, dma_idx;
+	int len, data_len, done = 0;
 	struct sk_buff *skb;
 	unsigned char *data;
-	bool check_ddone = false;
+	//bool check_ddone = false;
 	bool more;
-
+#ifdef CONFIG_SOC_WOE
+	int dma_idx;
+	bool check_ddone = false;
+#endif
+#if 0	
 	if (IS_ENABLED(CONFIG_NET_MEDIATEK_SOC_WED) &&
 	    q->flags == MT_WED_Q_TXFREE) {
 		dma_idx = Q_READ(dev, q, dma_idx);
 		check_ddone = true;
 	}
+#endif
+			/*if whnat enable && rxq_mcu_wa*/
+#ifdef CONFIG_SOC_WOE 
+	if(woe_enable())
+	{
+		if(q->flags == MT_WED_Q_TXFREE)
+		{
+			if(dev->slot_id == 0)
+				dma_idx = readl((void *)(wed_base_addr + WED_RX1_CTRL0 + 12));
+			else		
+				dma_idx = readl((void *)(wed_base_addr_1 + WED_RX1_CTRL0 + 12));
+			check_ddone = 1;
+		}
+	}
+#endif
 
 	while (done < budget) {
 		bool drop = false;
 		u32 info;
-
+#if 0
 		if (check_ddone) {
 			if (q->tail == dma_idx)
 				dma_idx = Q_READ(dev, q, dma_idx);
@@ -851,6 +1138,21 @@ mt76_dma_rx_process(struct mt76_dev *dev, struct mt76_queue *q, int budget)
 			if (q->tail == dma_idx)
 				break;
 		}
+#endif
+#ifdef CONFIG_SOC_WOE 
+		if(check_ddone && woe_enable())
+		{
+			if(q->tail == dma_idx)
+			{
+				if(dev->slot_id == 0)
+					dma_idx = readl((void *)(wed_base_addr + WED_RX1_CTRL0 + 12));
+				else
+					dma_idx = readl((void *)(wed_base_addr_1 + WED_RX1_CTRL0 + 12));	
+			}	
+			if(q->tail == dma_idx)
+				break;
+		}
+#endif
 
 		data = mt76_dma_dequeue(dev, q, false, &len, &info, &more,
 					&drop);
@@ -906,23 +1208,118 @@ free_frag:
 	mt76_dma_rx_fill(dev, q);
 	return done;
 }
+int dev_dbdc = 0;
+EXPORT_SYMBOL(dev_dbdc);
 
 int mt76_dma_rx_poll(struct napi_struct *napi, int budget)
 {
 	struct mt76_dev *dev;
 	int qid, done = 0, cur;
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD	
+	void * pkt=NULL;
+	int bReschedule=0;
+	struct sk_buff *skb;
+	int npu_done=0;
+	unsigned char band = 0;
+#endif
 
 	dev = container_of(napi->dev, struct mt76_dev, napi_dev);
 	qid = napi - dev->napi;
 
 	rcu_read_lock();
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD
+	if(npu_enable())
+	{
+		if(dev_dbdc)
+		{
+			if(qid != MT_RXQ_MAIN && qid != MT_RXQ_BAND1)
+			{
+				do {
+					cur = mt76_dma_rx_process(dev, &dev->q_rx[qid], budget - done);
+					mt76_rx_poll_complete(dev, qid, napi);
+					done += cur;
+				} while (cur && done < budget);
+			}
+			else
+			{
+				if(qid == MT_RXQ_MAIN)
+					band = 0;
+				else if(qid == MT_RXQ_BAND1)
+					band = 1;	
+				while (npu_done < budget)
+				{		
+					if(fromHostadptPktHandle_hook)
+						pkt = fromHostadptPktHandle_hook(band, &bReschedule);	
+					if(pkt)
+					{	npu_done++;
+						skb=(struct sk_buff *)pkt;
+						dev->drv->rx_skb(dev, &dev->q_rx[qid] - dev->q_rx, skb, 0);
+					}
+					else
+						break;
+					
+					mt76_rx_poll_complete(dev, qid, napi);	
+				}	
+				rcu_read_unlock();
+				if(npu_done < budget && napi_complete(napi))
+					dev->drv->rx_poll_complete(dev, qid);
+				return npu_done;	
+			}
+		}
+		else
+		{
+			do {
+					cur = mt76_dma_rx_process(dev, &dev->q_rx[qid], budget - done);
+					mt76_rx_poll_complete(dev, qid, napi);
+					done += cur;
+				} while (cur && done < budget && qid!=0);
+			do {	
 
+				unsigned char band = dev->slot_id;
+
+				if(fromHostadptPktHandle_hook){
+					pkt = fromHostadptPktHandle_hook(band, &bReschedule);	
+					}
+
+				if(pkt)
+				{	npu_done++;
+					skb=(struct sk_buff *)pkt;
+					dev->drv->rx_skb(dev, 0, skb, 0);  
+					continue;
+
+				}else
+				{	
+					mt76_rx_poll_complete(dev, 0, napi);
+					rcu_read_unlock();
+					if(napi_complete(napi))
+						dev->drv->rx_poll_complete(dev, qid);
+					return 0; 
+				}
+
+				mt76_rx_poll_complete(dev, 0, napi);
+				rcu_read_unlock();
+				if(napi_complete(napi))
+					dev->drv->rx_poll_complete(dev, qid);
+				return 0; 
+			   
+			} while (npu_done < budget && qid==0);			
+		}
+	}
+	else
+	{
+		do {
+			cur = mt76_dma_rx_process(dev, &dev->q_rx[qid], budget - done);
+			mt76_rx_poll_complete(dev, qid, napi);
+			done += cur;
+		} while (cur && done < budget);
+	}
+#else
 	do {
 		cur = mt76_dma_rx_process(dev, &dev->q_rx[qid], budget - done);
 		mt76_rx_poll_complete(dev, qid, napi);
 		done += cur;
 	} while (cur && done < budget);
-
+#endif
 	rcu_read_unlock();
 
 	if (done < budget && napi_complete(napi))
@@ -931,7 +1328,6 @@ int mt76_dma_rx_poll(struct napi_struct *napi, int budget)
 	return done;
 }
 EXPORT_SYMBOL_GPL(mt76_dma_rx_poll);
-
 static int
 mt76_dma_init(struct mt76_dev *dev,
 	      int (*poll)(struct napi_struct *napi, int budget))
@@ -1003,10 +1399,10 @@ void mt76_dma_cleanup(struct mt76_dev *dev)
 
 	mt76_free_pending_txwi(dev);
 	mt76_free_pending_rxwi(dev);
-
+#if 0
 	if (mtk_wed_device_active(&dev->mmio.wed))
 		mtk_wed_device_detach(&dev->mmio.wed);
-
+#endif
 	mt76_free_pending_rxwi(dev);
 }
 EXPORT_SYMBOL_GPL(mt76_dma_cleanup);

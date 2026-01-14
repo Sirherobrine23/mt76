@@ -10,6 +10,19 @@
 #include "mac.h"
 #include "../trace.h"
 #include "../dma.h"
+#ifdef CONFIG_SOC_WOE 
+#include "../mt76_woe.h"
+#endif
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD
+extern struct sk_buff *(*fromHostadptPktHandle_hook)(unsigned int ringIdx, unsigned char* preschedule);
+extern void (*hostdapt_enable_int_hook)(unsigned int ringIdx);
+extern void (*hostdapt_disable_int_hook)(unsigned int ringIdx);
+extern void (*hostdapt_registe_wifitask_hook)(unsigned int ringIdx, void *func);
+
+struct mt7915_dev *MT7915_2G;
+struct mt7915_dev *MT7915_5G;
+
+#endif
 
 static bool wed_enable = true;
 module_param(wed_enable, bool, 0644);
@@ -724,7 +737,8 @@ static void mt7915_mmio_wed_update_rx_stats(struct mtk_wed_device *wed,
 int mt7915_mmio_wed_init(struct mt7915_dev *dev, void *pdev_ptr,
 			 bool pci, int *irq)
 {
-#ifdef CONFIG_NET_MEDIATEK_SOC_WED
+//#ifdef CONFIG_NET_MEDIATEK_SOC_WED
+#if 0
 	struct mtk_wed_device *wed = &dev->mt76.mmio.wed;
 	int ret;
 
@@ -818,7 +832,7 @@ int mt7915_mmio_wed_init(struct mt7915_dev *dev, void *pdev_ptr,
 
 	return 1;
 #else
-	return 0;
+	return 1;
 #endif
 }
 
@@ -886,32 +900,111 @@ void mt7915_dual_hif_set_irq_mask(struct mt7915_dev *dev,
 	mdev->mmio.irqmask |= set;
 
 	if (write_reg) {
+#if 0
 		if (mtk_wed_device_active(&mdev->mmio.wed))
 			mtk_wed_device_irq_set_mask(&mdev->mmio.wed,
-						    mdev->mmio.irqmask);
+							mdev->mmio.irqmask);
+		else
+#endif
+#ifdef CONFIG_SOC_WOE 	
+		if(woe_enable())
+			mtk_wed_irq_set_mask_woe(mdev, mdev->mmio.irqmask);
 		else
 			mt76_wr(dev, MT_INT_MASK_CSR, mdev->mmio.irqmask);
+#else
+		mt76_wr(dev, MT_INT_MASK_CSR, mdev->mmio.irqmask);
+#endif
 		mt76_wr(dev, MT_INT1_MASK_CSR, mdev->mmio.irqmask);
 	}
 
 	spin_unlock_irqrestore(&mdev->mmio.irq_lock, flags);
 }
-
 static void mt7915_rx_poll_complete(struct mt76_dev *mdev,
-				    enum mt76_rxq_id q)
+			    enum mt76_rxq_id q)
 {
 	struct mt7915_dev *dev = container_of(mdev, struct mt7915_dev, mt76);
-
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD
+	if(npu_enable())
+	{
+		if(q != MT_RXQ_MAIN && q != MT_RXQ_BAND1)//wifi host not rcv data pkts after enable npu
+			mt7915_irq_enable(dev, MT_INT_RX(q)); //enable wifi irq
+		if(dev->dbdc_support)
+		{
+			if(q == MT_RXQ_BAND1)
+				hostdapt_enable_int_hook(1);//enable hostdapt 5G irq
+			else if(q == MT_RXQ_MAIN)
+				hostdapt_enable_int_hook(0);//enable hostdapt 2G irq			
+		}
+		else
+		{
+			if(mdev->slot_id)
+				hostdapt_enable_int_hook(1);//enable hostdapt 5G irq
+			else
+				hostdapt_enable_int_hook(0);//enable hostdapt 2G irq			
+		}	
+	}
+	else
+		mt7915_irq_enable(dev, MT_INT_RX(q));
+#else
 	mt7915_irq_enable(dev, MT_INT_RX(q));
+#endif
 }
+
+
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD
+int tasklet_schedule_rx_data_done_npu_2G(void)
+{	  
+	struct mt7915_dev *dev;		
+   	if(MT7915_2G){    		
+   		dev=MT7915_2G;				
+		tasklet_schedule(&dev->npu_rx_tasklet_2g);	
+		}				
+	return 0;
+}
+int tasklet_schedule_rx_data_done_npu_5G(void)
+{	
+	struct mt7915_dev *dev;		
+   	if(MT7915_5G){    		
+   		dev=MT7915_5G;				
+		tasklet_schedule(&dev->npu_rx_tasklet_5g);	
+		}					
+	return 0;
+}
+extern int dev_dbdc;
+static void mt7915_npu_rx_tasklet(struct tasklet_struct *t)
+{
+	struct mt7915_dev *dev;
+    if(MT7915_2G)
+    {
+		dev=MT7915_2G;
+		napi_schedule(&dev->mt76.napi[MT_RXQ_MAIN]);
+    }	
+}
+
+
+static void mt7915_npu_rx_5g_tasklet(struct tasklet_struct *t)
+{
+
+	struct mt7915_dev *dev;
+	if(MT7915_5G)
+	{
+		dev=MT7915_5G;
+		if(dev_dbdc)
+			napi_schedule(&dev->mt76.napi[MT_RXQ_BAND1]);		
+		else
+			napi_schedule(&dev->mt76.napi[MT_RXQ_MAIN]);
+	}	
+}
+#endif
+
 
 /* TODO: support 2/4/6/8 MSI-X vectors */
 static void mt7915_irq_tasklet(struct tasklet_struct *t)
 {
 	struct mt7915_dev *dev = from_tasklet(dev, t, irq_tasklet);
-	struct mtk_wed_device *wed = &dev->mt76.mmio.wed;
+	//struct mtk_wed_device *wed = &dev->mt76.mmio.wed;
 	u32 intr, intr1, mask;
-
+#if 0
 	if (mtk_wed_device_active(wed)) {
 		mtk_wed_device_irq_set_mask(wed, 0);
 		if (dev->hif2)
@@ -926,6 +1019,26 @@ static void mt7915_irq_tasklet(struct tasklet_struct *t)
 		intr &= dev->mt76.mmio.irqmask;
 		mt76_wr(dev, MT_INT_SOURCE_CSR, intr);
 	}
+#endif
+#ifdef CONFIG_SOC_WOE 	
+	if(woe_enable())
+	{
+		mtk_wed_irq_set_mask(dev, 0);
+		if (dev->hif2)
+			mt76_wr(dev, MT_INT1_MASK_CSR, 0);		
+		intr = mtk_wed_irq_get(dev, dev->mt76.mmio.irqmask);
+	}
+	else
+#endif
+	{
+		mt76_wr(dev, MT_INT_MASK_CSR, 0);
+		if (dev->hif2)
+			mt76_wr(dev, MT_INT1_MASK_CSR, 0);
+
+		intr = mt76_rr(dev, MT_INT_SOURCE_CSR);
+		intr &= dev->mt76.mmio.irqmask;
+		mt76_wr(dev, MT_INT_SOURCE_CSR, intr);
+	}	
 
 	if (dev->hif2) {
 		intr1 = mt76_rr(dev, MT_INT1_SOURCE_CSR);
@@ -946,11 +1059,21 @@ static void mt7915_irq_tasklet(struct tasklet_struct *t)
 	if (intr & MT_INT_TX_DONE_MCU)
 		napi_schedule(&dev->mt76.tx_napi);
 
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD
+	if(!npu_enable()){
+		if (intr & MT_INT_RX(MT_RXQ_MAIN))
+			napi_schedule(&dev->mt76.napi[MT_RXQ_MAIN]);
+		if (intr & MT_INT_RX(MT_RXQ_BAND1))
+			napi_schedule(&dev->mt76.napi[MT_RXQ_BAND1]);	
+	}	
+#else
 	if (intr & MT_INT_RX(MT_RXQ_MAIN))
 		napi_schedule(&dev->mt76.napi[MT_RXQ_MAIN]);
-
 	if (intr & MT_INT_RX(MT_RXQ_BAND1))
 		napi_schedule(&dev->mt76.napi[MT_RXQ_BAND1]);
+	
+#endif
+
 
 	if (intr & MT_INT_RX(MT_RXQ_MCU))
 		napi_schedule(&dev->mt76.napi[MT_RXQ_MCU]);
@@ -979,13 +1102,22 @@ static void mt7915_irq_tasklet(struct tasklet_struct *t)
 irqreturn_t mt7915_irq_handler(int irq, void *dev_instance)
 {
 	struct mt7915_dev *dev = dev_instance;
+#if 0	
 	struct mtk_wed_device *wed = &dev->mt76.mmio.wed;
 
 	if (mtk_wed_device_active(wed))
 		mtk_wed_device_irq_set_mask(wed, 0);
 	else
 		mt76_wr(dev, MT_INT_MASK_CSR, 0);
-
+#endif
+#ifdef CONFIG_SOC_WOE 
+	if(woe_enable())
+		mtk_wed_irq_set_mask(dev, 0);
+	else
+		mt76_wr(dev, MT_INT_MASK_CSR, 0);
+#else	
+	mt76_wr(dev, MT_INT_MASK_CSR, 0);
+#endif		
 	if (dev->hif2)
 		mt76_wr(dev, MT_INT1_MASK_CSR, 0);
 
@@ -997,8 +1129,23 @@ irqreturn_t mt7915_irq_handler(int irq, void *dev_instance)
 	return IRQ_HANDLED;
 }
 
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD
+
+static bool mt7915_band_config_1(struct mt7915_dev *dev)
+{
+	bool ret = true;
+	//dev->phy.band_idx = 0;
+	ret = is_mt7915(&dev->mt76) ?
+		    !!(mt76_rr(dev, MT_HW_BOUND) & BIT(5)) : true;
+	return ret;
+}
+struct mt7915_dev *mt7915_mmio_probe(struct device *pdev,
+				     void __iomem *mem_base, u32 device_id,struct pci_dev *pci_dev)
+#else
 struct mt7915_dev *mt7915_mmio_probe(struct device *pdev,
 				     void __iomem *mem_base, u32 device_id)
+#endif	
+
 {
 	static const struct mt76_driver_ops drv_ops = {
 		/* txwi_size = txd size + txp size */
@@ -1023,6 +1170,9 @@ struct mt7915_dev *mt7915_mmio_probe(struct device *pdev,
 	struct mt7915_dev *dev;
 	struct mt76_dev *mdev;
 	int ret;
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD	
+	unsigned char band;
+#endif
 
 	mdev = mt76_alloc_device(pdev, sizeof(*dev), &mt7915_ops, &drv_ops);
 	if (!mdev)
@@ -1035,6 +1185,62 @@ struct mt7915_dev *mt7915_mmio_probe(struct device *pdev,
 		goto error;
 
 	tasklet_setup(&dev->irq_tasklet, mt7915_irq_tasklet);
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD	
+	if (pci_dev->bus)
+		band = (pci_dev->bus->self->devfn >> 3) & 0x1f;
+	else
+		band = 1;
+	dev_dbdc = mt7915_band_config_1(dev);
+	if(npu_enable()){	
+		if(dev_dbdc)
+		{
+			if(hostdapt_registe_wifitask_hook){
+				hostdapt_registe_wifitask_hook(0, tasklet_schedule_rx_data_done_npu_2G);
+			}
+
+			tasklet_setup(&dev->npu_rx_tasklet_2g, mt7915_npu_rx_tasklet);
+			MT7915_2G=dev;
+			
+			if(hostdapt_registe_wifitask_hook){
+				hostdapt_registe_wifitask_hook(1, tasklet_schedule_rx_data_done_npu_5G);
+			}
+
+			tasklet_setup(&dev->npu_rx_tasklet_5g, mt7915_npu_rx_5g_tasklet);
+			MT7915_5G=dev;			
+		}
+		else
+		{
+			printk("%s:%d band=%d !!!\n",__func__,__LINE__,band);
+			if(band == 0)
+			{
+				if(hostdapt_registe_wifitask_hook){
+				
+					printk("call HOSTDAPT WIFI HOOK  2G \n");
+					hostdapt_registe_wifitask_hook(0, tasklet_schedule_rx_data_done_npu_2G);
+					}
+
+				printk("init 2G tasklet ! \n");
+				tasklet_setup(&dev->npu_rx_tasklet_2g, mt7915_npu_rx_tasklet);
+				MT7915_2G=dev;
+				
+			}	
+			else
+			{
+				if(hostdapt_registe_wifitask_hook){
+				
+					printk("call HOSTDAPT WIFI HOOK  5G \n");
+					hostdapt_registe_wifitask_hook(1, tasklet_schedule_rx_data_done_npu_5G);
+					}
+
+				printk("init 5G tasklet ! \n");
+				tasklet_setup(&dev->npu_rx_tasklet_5g, mt7915_npu_rx_5g_tasklet);
+				MT7915_5G=dev;
+			}
+
+		}
+		
+	}	
+#endif
 
 	return dev;
 
