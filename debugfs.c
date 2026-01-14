@@ -44,9 +44,11 @@ mt76_napi_threaded_set(void *data, u64 val)
 static int
 mt76_napi_threaded_get(void *data, u64 *val)
 {
+#ifdef MT76_MTK_WOE	
 	struct mt76_dev *dev = data;
 
 	*val = dev->napi_dev.threaded;
+#endif	//napi_dev is without threaded, which is not defined in <linux/netdevice.h>
 	return 0;
 }
 
