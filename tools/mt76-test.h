@@ -10,6 +10,8 @@
 #include <unl.h>
 
 #include "../testmode.h"
+#define BIT(_nr)			(1 << (_nr))
+#include "../mt7915/vendor.h"
 
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
@@ -56,6 +58,8 @@ struct tm_field {
 
 extern struct unl unl;
 extern const struct tm_field msg_field;
+extern const struct tm_field vendor_rstats_field; 
+extern const struct tm_field vendor_ifstats_field;
 extern unsigned char *eeprom_data;
 
 void usage(void);

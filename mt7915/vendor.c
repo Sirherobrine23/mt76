@@ -4,6 +4,7 @@
  */
 
 #include <net/netlink.h>
+#include <linux/ethtool.h>
 
 #include "mt7915.h"
 #include "mcu.h"
@@ -96,6 +97,69 @@ edcca_dump_policy[NUM_MTK_VENDOR_ATTRS_EDCCA_DUMP] = {
 static const struct nla_policy
 ibf_ctrl_policy[NUM_MTK_VENDOR_ATTRS_IBF_CTRL] = {
 	[MTK_VENDOR_ATTR_IBF_CTRL_ENABLE] = { .type = NLA_U8 },
+};
+
+static const struct nla_policy
+rstats_policy[NUM_MTK_VENDOR_ATTRS_RSTATS_DUMP] = {
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_CTS_RCVD] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_CTS_NOT_RCVD] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_RX_FRAME_ERR_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_RX_GOOG_PLCP_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_RX_OMAC_DATA_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_RX_OMAC_MGMT_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_RX_OMAC_CTRL_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_RX_OMAC_CTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_RX_OMAC_RTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_TX_BYTES] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_RX_BYTES] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_TX_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_RX_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_TX_ERR_PKTS] = { .type = NLA_U32 },
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_RX_ERR_PKTS] = { .type = NLA_U32 },
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_TX_DROPPED_PKTS] = { .type = NLA_U32 },
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_RX_DROPPED_PKTS] = { .type = NLA_U32 },
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_RX_PLCP_ERR_PKTS] = { .type = NLA_U32 },
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_RX_FCS_ERR_PKTS] = { .type = NLA_U32 },
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_RX_MAC_ERR_PKTS] = { .type = NLA_U32 },
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_RX_UNKNOWN_PKTS] = { .type = NLA_U32 },
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_NOISE] = { .type = NLA_U16 },
+};
+
+static const struct nla_policy
+ifstats_policy[NUM_MTK_VENDOR_ATTRS_IFSTATS_DUMP] = {
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_TX_BYTES] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_RX_BYTES] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_TX_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_RX_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_TX_ERR_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_TX_RTX_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_TX_RTX_FAIL_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_TX_RETRY_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_TX_MRETRY_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_ACK_FAIL_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_AGGR_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_RX_ERR_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_TX_UCAST_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_RX_UCAST_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_TX_DROPPED_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_RX_DROPPED_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_TX_MCAST_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_RX_MCAST_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_TX_BCAST_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_RX_BCAST_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_RX_UNKNOWN_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_TX_BUF_OVERFLOW] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_TX_STA_NOT_ASSOC] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_TX_FRAGS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_TX_NO_ACK_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_RX_DUP_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_RX_TOO_LONG_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_TX_TOO_SHORT_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_UCAST_ACK] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_LAST_DL_RATE] = { .type = NLA_U32 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_LAST_UL_RATE] = { .type = NLA_U32 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_SIGNAL] = { .type = NLA_U8 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_RETRANS_100] = { .type = NLA_U8 },
 };
 
 struct csi_null_tone {
@@ -1276,6 +1340,195 @@ mt7915_vendor_ibf_ctrl_dump(struct wiphy *wiphy, struct wireless_dev *wdev,
 	return 1;
 }
 
+static int
+mt7915_vendor_rstats_dump(struct wiphy *wiphy,
+							struct wireless_dev *wdev,
+							struct sk_buff *skb,
+							const void *data, int data_len,
+							unsigned long *storage)
+{
+	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
+	struct mt7915_dev *dev = mt7915_hw_dev(hw);
+	struct mt7915_phy *phy = mt7915_hw_phy(hw);
+	struct mib_stats *mib = &phy->mib;
+	u64 tx_bytes = 0, rx_bytes = 0, tx_packets = 0, rx_packets = 0,
+	    tx_errors = 0, rx_errors = 0, tx_dropped = 0, rx_dropped = 0;
+
+	if ((*storage)++ > 0)
+		return -ENOENT;
+
+#define PUT(_attr, _value) \
+	do { \
+		if (nla_put_u64_64bit(skb, MTK_VENDOR_ATTR_RSTATS_DUMP_##_attr, \
+							_value, MTK_VENDOR_ATTR_RSTATS_DUMP_PAD))   \
+			return -ENOMEM; \
+	} while (0)
+
+#define PUT_ND(_var) _var += stats._var
+
+	list_for_each_entry(wdev, &wiphy->wdev_list, list) {
+		struct rtnl_link_stats64 stats = { 0, };
+
+		dev_get_stats(wdev->netdev, &stats);
+
+		PUT_ND(tx_bytes);
+		PUT_ND(rx_bytes);
+		PUT_ND(tx_packets);
+		PUT_ND(rx_packets);
+		PUT_ND(tx_errors);
+		PUT_ND(rx_errors);
+		PUT_ND(tx_dropped);
+		PUT_ND(rx_dropped);
+	}
+#undef PUT_ND
+
+	PUT(CTS_RCVD, 0);
+	PUT(CTS_NOT_RCVD, 0);
+	PUT(RX_FRAME_ERR_PKTS, 0);
+	PUT(RX_GOOG_PLCP_PKTS, 0);
+	PUT(RX_OMAC_DATA_PKTS, 0);
+	PUT(RX_OMAC_MGMT_PKTS, 0);
+	PUT(RX_OMAC_CTRL_PKTS, 0);
+	PUT(RX_OMAC_CTS, 0);
+	PUT(RX_OMAC_RTS, 0);
+
+	mutex_lock(&dev->mt76.mutex);
+
+	mt7915_mac_update_stats(phy);
+	mt7915_update_channel(phy->mt76);
+	tx_errors += mib->tx_rwp_fail_cnt;
+	rx_errors += mib->rx_fifo_full_cnt + mib->rx_delimiter_fail_cnt +
+	             mib->rx_vector_mismatch_cnt + mib->rx_len_mismatch_cnt;
+
+	PUT(RX_PLCP_ERR_PKTS, 0);
+	PUT(RX_FCS_ERR_PKTS, mib->fcs_err_cnt);
+	PUT(RX_MAC_ERR_PKTS, 0);
+	PUT(RX_UNKNOWN_PKTS, 0);
+	PUT(NOISE, phy->noise);
+
+	mutex_unlock(&dev->mt76.mutex);
+
+	PUT(TX_BYTES, tx_bytes);
+	PUT(RX_BYTES, rx_bytes);
+	PUT(TX_PKTS, tx_packets);
+	PUT(RX_PKTS, rx_packets);
+	PUT(TX_ERR_PKTS, tx_errors);
+	PUT(RX_ERR_PKTS, rx_errors);
+	PUT(TX_DROPPED_PKTS, tx_dropped);
+	PUT(RX_DROPPED_PKTS, rx_dropped);
+
+#undef PUT
+	return 1;
+}
+
+static int
+mt7915_vendor_ifstats_dump(struct wiphy *wiphy,
+							struct wireless_dev *wdev,
+							struct sk_buff *skb,
+							const void *data, int data_len,
+							unsigned long *storage)
+{
+	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
+	struct mt7915_dev *dev = mt7915_hw_dev(hw);
+	struct mt7915_phy *phy = mt7915_hw_phy(hw);
+	struct mib_stats  *mib = &phy->mib;
+	struct rtnl_link_stats64  stats = { 0, };
+	struct net_device *ndev = wdev->netdev;
+	int n_stats;
+
+	if ((*storage)++ > 0)
+		return -ENOENT;
+
+#define PUT(_attr, _value) \
+	do { \
+		if (nla_put_u64_64bit(skb, MTK_VENDOR_ATTR_IFSTATS_DUMP_##_attr, \
+							_value, MTK_VENDOR_ATTR_IFSTATS_DUMP_PAD)) \
+			return -ENOMEM; \
+	} while (0)
+
+#define PUTT(_attr, _value, _type) \
+	do { \
+		if (nla_put_##_type(skb, MTK_VENDOR_ATTR_IFSTATS_DUMP_##_attr, _value)) \
+			return -ENOMEM; \
+	} while (0)
+
+	dev_get_stats(ndev, &stats);
+
+#define PUT_ND(_attr, _field) PUT(_attr, stats._field)
+
+	PUT_ND(TX_BYTES, tx_bytes);
+	PUT_ND(RX_BYTES, rx_bytes);
+	PUT_ND(TX_PKTS, tx_packets);
+	PUT_ND(RX_PKTS, rx_packets);
+	PUT_ND(TX_ERR_PKTS, tx_errors);
+	PUT_ND(RX_ERR_PKTS, rx_errors);
+	PUT_ND(TX_DROPPED_PKTS, tx_dropped);
+	PUT_ND(RX_DROPPED_PKTS, rx_dropped);
+	PUT(TX_MCAST_PKTS, 0);
+	PUT_ND(RX_MCAST_PKTS, multicast);
+	PUT_ND(TX_UCAST_PKTS, tx_packets);
+	PUT(RX_UCAST_PKTS, stats.rx_packets - stats.multicast);
+	PUT(TX_BCAST_PKTS, 0);
+	PUT(RX_BCAST_PKTS, 0);
+
+	n_stats = ndev->ethtool_ops->get_sset_count(ndev, ETH_SS_STATS);
+	if (n_stats > 0) {
+		struct ethtool_stats et_stats;
+		u64 *et_data = vzalloc(n_stats * sizeof(u64));
+		char *et_strings = vzalloc(n_stats * ETH_SS_STATS);
+		char *tmp;
+		int i;
+
+		et_stats.n_stats = n_stats;
+		/* It calls mt7915_mac_update_stats() inside */
+		ndev->ethtool_ops->get_strings(ndev, ETH_SS_STATS, (u8 *)et_strings);
+		ndev->ethtool_ops->get_ethtool_stats(ndev, &et_stats, et_data);
+		
+		for (i = 0, tmp = et_strings; i < n_stats; i++, tmp += ETH_SS_STATS)
+		{
+			if (strcmp(tmp, "tx_retries") == 0) {
+				PUT(TX_RTX_PKTS, et_data[i]);
+				PUT(TX_RETRY_PKTS, et_data[i]);
+			}
+			else if (strcmp(tmp, "tx_retry_failed") == 0)
+				PUT(TX_RTX_FAIL_PKTS, et_data[i]);
+			else if (strcmp(tmp, "rxrate") == 0)
+				PUTT(LAST_DL_RATE, et_data[12] / 1000, u32);
+			else if (strcmp(tmp, "txrate") == 0)
+				PUTT(LAST_UL_RATE, et_data[11] / 1000, u32);
+			else if (strcmp(tmp, "signal") == 0)
+				PUTT(SIGNAL, (u8)(et_data[13]), u8);
+		}
+
+		PUTT(RETRANS_100, 0, u8);
+		vfree(et_data);
+		vfree(et_strings);
+	} else {
+		mutex_lock(&dev->mt76.mutex);
+		mt7915_mac_update_stats(phy);
+		mutex_unlock(&dev->mt76.mutex);
+	}
+
+	PUT(ACK_FAIL_PKTS, mib->ack_fail_cnt);
+	PUT(AGGR_PKTS, mib->tx_ampdu_cnt);
+
+	PUT(TX_MRETRY_PKTS, 0);
+	PUT(RX_UNKNOWN_PKTS, 0);
+	PUT(TX_BUF_OVERFLOW, 0);
+	PUT(TX_STA_NOT_ASSOC, 0);
+	PUT(TX_FRAGS, 0);
+	PUT(TX_NO_ACK_PKTS, 0);
+	PUT(RX_DUP_PKTS, 0);
+	PUT(RX_TOO_LONG_PKTS, 0);
+	PUT(TX_TOO_SHORT_PKTS, 0);
+	PUT(UCAST_ACK, 0);
+
+#undef PUT_ND
+#undef PUT
+#undef PUTT
+
+	return 1;
+}
 
 static const struct wiphy_vendor_command mt7915_vendor_commands[] = {
 	{
@@ -1382,6 +1635,26 @@ static const struct wiphy_vendor_command mt7915_vendor_commands[] = {
 		.dumpit = mt7915_vendor_ibf_ctrl_dump,
 		.policy = ibf_ctrl_policy,
 		.maxattr = MTK_VENDOR_ATTR_IBF_CTRL_MAX,
+	},
+	{
+		.info = {
+			.vendor_id = MTK_NL80211_VENDOR_ID,
+			.subcmd = MTK_NL80211_VENDOR_SUBCMD_RSTATS,
+		},
+		.flags = 0,
+		.dumpit = mt7915_vendor_rstats_dump,
+		.policy = rstats_policy,
+		.maxattr = MTK_VENDOR_ATTR_RSTATS_DUMP_MAX,
+	},
+	{
+		.info = {
+			.vendor_id = MTK_NL80211_VENDOR_ID,
+			.subcmd = MTK_NL80211_VENDOR_SUBCMD_IFSTATS,
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.dumpit = mt7915_vendor_ifstats_dump,
+		.policy = ifstats_policy,
+		.maxattr = MTK_VENDOR_ATTR_IFSTATS_DUMP_MAX,
 	}
 };
 

@@ -2,6 +2,7 @@
 /* Copyright (C) 2020 Felix Fietkau <nbd@nbd.name> */
 #define _GNU_SOURCE
 #include "mt76-test.h"
+#include "../mt7915/vendor.h"
 
 static char prefix[64];
 
@@ -119,7 +120,18 @@ static bool parse_u16_hex(const struct tm_field *field, int idx,
 	return !nla_put_u16(msg, idx, strtoul(val, NULL, 16));
 }
 
+static bool parse_u16(const struct tm_field *field, int idx,
+			  struct nl_msg *msg, const char *val)
+{
+	return !nla_put_u16(msg, idx, strtoul(val, NULL, 10));
+}
+
 static void print_u16_hex(const struct tm_field *field, struct nlattr *attr)
+{
+	printf("%d", nla_get_u16(attr));
+}
+
+static void print_u16(const struct tm_field *field, struct nlattr *attr)
 {
 	printf("%d", nla_get_u16(attr));
 }
@@ -128,6 +140,12 @@ static bool parse_u32(const struct tm_field *field, int idx,
 		      struct nl_msg *msg, const char *val)
 {
 	return !nla_put_u32(msg, idx, strtoul(val, NULL, 0));
+}
+
+static bool parse_u64(const struct tm_field *field, int idx,
+		      struct nl_msg *msg, const char *val)
+{
+	return !nla_put_u64(msg, idx, strtoull(val, NULL, 0));
 }
 
 static void print_s32(const struct tm_field *field, struct nlattr *attr)
@@ -480,4 +498,135 @@ const struct tm_field msg_field = {
 	.fields = testdata_fields,
 	.policy = testdata_policy,
 	.len = ARRAY_SIZE(testdata_fields)
+};
+
+#define FIELD_NAME(_field)  MTK_VENDOR_ATTR_RSTATS_DUMP_##_field
+static const struct tm_field vendor_rstats_fields[NUM_MTK_VENDOR_ATTRS_RSTATS_DUMP] = {
+	FIELD(u64, CTS_RCVD, "cts_rcvd"),
+	FIELD(u64, CTS_NOT_RCVD, "cts_not_rcvd"),
+	FIELD(u64, RX_FRAME_ERR_PKTS, "rx_frame_err_pkts"),
+	FIELD(u64, RX_GOOG_PLCP_PKTS, "rx_good_plcp_pkts"),
+	FIELD(u64, RX_OMAC_DATA_PKTS, "omac_data_pkts"),
+	FIELD(u64, RX_OMAC_MGMT_PKTS, "omac_mgmt_pkts"),
+	FIELD(u64, RX_OMAC_CTRL_PKTS, "omac_ctrl_pkts"),
+	FIELD(u64, RX_OMAC_CTS, "omac_cts"),
+	FIELD(u64, RX_OMAC_RTS, "omac_rts"),
+	FIELD(u64, TX_BYTES, "tx_bytes"),
+	FIELD(u64, RX_BYTES, "rx_bytes"),
+	FIELD(u64, TX_PKTS, "tx_pkts"),
+	FIELD(u64, RX_PKTS, "rx_ptks") ,
+	FIELD(u32, TX_ERR_PKTS, "tx_err_pkts"),
+	FIELD(u32, RX_ERR_PKTS, "rx_err_pkts"),
+	FIELD(u32, TX_DROPPED_PKTS, "tx_dropped_pkts"),
+	FIELD(u32, RX_DROPPED_PKTS, "rx_dropped_pkts"),
+	FIELD(u32, RX_PLCP_ERR_PKTS, "rx_plcp_err_pkts"),
+	FIELD(u32, RX_FCS_ERR_PKTS, "rx_fcs_err_pkts"),
+	FIELD(u32, RX_MAC_ERR_PKTS, "rx_max_err_pkts"),
+	FIELD(u32, RX_UNKNOWN_PKTS, "rx_unknown_pkts"),
+	FIELD(u16, NOISE, "noise"),
+};
+#undef FIELD_NAME
+
+static struct nla_policy vendor_rstats_policy[] = {
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_TX_BYTES] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_RX_BYTES] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_TX_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_RX_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_TX_ERR_PKTS] = { .type = NLA_U32 },
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_RX_ERR_PKTS] = { .type = NLA_U32 },
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_TX_DROPPED_PKTS] = { .type = NLA_U32 },
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_RX_DROPPED_PKTS] = { .type = NLA_U32 },
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_RX_PLCP_ERR_PKTS] = { .type = NLA_U32 },
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_RX_FCS_ERR_PKTS] = { .type = NLA_U32 },
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_RX_MAC_ERR_PKTS] = { .type = NLA_U32 },
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_RX_UNKNOWN_PKTS] = { .type = NLA_U32 },
+	[MTK_VENDOR_ATTR_RSTATS_DUMP_NOISE] = { .type = NLA_U16 },
+};
+
+const struct tm_field vendor_rstats_field = {
+	.print = print_nested,
+	.fields = vendor_rstats_fields,
+	.policy = vendor_rstats_policy,
+	.len = ARRAY_SIZE(vendor_rstats_fields)
+};
+
+#define FIELD_NAME(_field)  MTK_VENDOR_ATTR_IFSTATS_DUMP_##_field
+static const struct tm_field vendor_ifstats_fields[NUM_MTK_VENDOR_ATTRS_IFSTATS_DUMP] = {
+	FIELD(u64, TX_BYTES, "tx_bytes"),
+	FIELD(u64, RX_BYTES, "rx_bytes"),
+	FIELD(u64, TX_PKTS, "tx_pkts"),
+	FIELD(u64, RX_PKTS, "rx_pkts"),
+	FIELD(u64, TX_ERR_PKTS, "tx_err_pkts"),
+	FIELD(u64, TX_RTX_PKTS, "tx_rtx_pkts"),
+	FIELD(u64, TX_RTX_FAIL_PKTS, "tx_rtx_fail_pkts"),
+	FIELD(u64, TX_RETRY_PKTS, "tx_retry_pkts"),
+	FIELD(u64, TX_MRETRY_PKTS, "tx_mretry_pkts"),
+	FIELD(u64, ACK_FAIL_PKTS, "ack_fail_pkts"),
+	FIELD(u64, AGGR_PKTS, "aggr_pkts"),
+	FIELD(u64, RX_ERR_PKTS, "rx_err_pkts"),
+	FIELD(u64, TX_UCAST_PKTS, "tx_ucast_pkts"),
+	FIELD(u64, RX_UCAST_PKTS, "rx_ucast_pkts"),
+	FIELD(u64, TX_DROPPED_PKTS, "tx_dropped_pkts"),
+	FIELD(u64, RX_DROPPED_PKTS, "rx_dropped_pkts"),
+	FIELD(u64, TX_MCAST_PKTS, "tx_mcast_pkts"),
+	FIELD(u64, RX_MCAST_PKTS, "rx_mcast_pkts"),
+	FIELD(u64, TX_BCAST_PKTS, "tx_bcast_pkts"),
+	FIELD(u64, RX_BCAST_PKTS, "rx_bcast_pkts"),
+	FIELD(u64, RX_UNKNOWN_PKTS, "rx_unknown_pkts"),
+	FIELD(u64, TX_BUF_OVERFLOW, "tx_buf_overflow"),
+	FIELD(u64, TX_STA_NOT_ASSOC, "tx_sta_not_assoc"),
+	FIELD(u64, TX_FRAGS, "tx_frags"),
+	FIELD(u64, TX_NO_ACK_PKTS, "tx_no_ack_pkts"),
+	FIELD(u64, RX_DUP_PKTS, "rx_dup_pkts"),
+	FIELD(u64, RX_TOO_LONG_PKTS, "tx_too_long_pkts"),
+	FIELD(u64, TX_TOO_SHORT_PKTS, "tx_too_hort_pkts"),
+	FIELD(u64, UCAST_ACK, "ucast_ack"),
+	FIELD(u32, LAST_DL_RATE, "last_dl_rate"),
+	FIELD(u32, LAST_UL_RATE, "last_ul_rate"),
+	FIELD(u8, SIGNAL, "signal"),
+	FIELD(u8, RETRANS_100, "retrans_100"),
+};
+#undef FIELD_NAME
+
+static struct nla_policy vendor_ifstats_policy[] = {
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_TX_BYTES] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_RX_BYTES] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_TX_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_RX_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_TX_ERR_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_TX_RTX_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_TX_RTX_FAIL_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_TX_RETRY_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_TX_MRETRY_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_ACK_FAIL_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_AGGR_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_RX_ERR_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_TX_UCAST_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_RX_UCAST_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_TX_DROPPED_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_RX_DROPPED_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_TX_MCAST_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_RX_MCAST_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_TX_BCAST_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_RX_BCAST_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_RX_UNKNOWN_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_TX_BUF_OVERFLOW] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_TX_STA_NOT_ASSOC] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_TX_FRAGS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_TX_NO_ACK_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_RX_DUP_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_RX_TOO_LONG_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_TX_TOO_SHORT_PKTS] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_UCAST_ACK] = { .type = NLA_U64 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_LAST_DL_RATE] = { .type = NLA_U32 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_LAST_UL_RATE] = { .type = NLA_U32 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_SIGNAL] = { .type = NLA_U8 },
+	[MTK_VENDOR_ATTR_IFSTATS_DUMP_RETRANS_100] = { .type = NLA_U8 },
+};
+
+const struct tm_field vendor_ifstats_field = {
+	.print = print_nested,
+	.fields = vendor_ifstats_fields,
+	.policy = vendor_ifstats_policy,
+	.len = ARRAY_SIZE(vendor_ifstats_fields)
 };

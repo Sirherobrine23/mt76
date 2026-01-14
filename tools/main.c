@@ -6,6 +6,7 @@
 #include <sys/uio.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <net/if.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <stdbool.h>
@@ -49,6 +50,8 @@ void usage(void)
 		"eeprom set <addr>=<val> [...]",
 		"eeprom changes",
 		"eeprom reset",
+		"vendor rstats",
+		"vendor ifstats <interface>",
 	};
 	int i;
 
@@ -164,6 +167,57 @@ static int mt76_set(int phy, int argc, char **argv)
 	return ret;
 }
 
+static int mt76_vendor_cb(struct nl_msg *msg, void *arg)
+{
+	struct nlattr *attr;
+
+	attr = unl_find_attr(&unl, msg, NL80211_ATTR_VENDOR_DATA);
+	if (!attr) {
+		fprintf(stderr, "Vendordata attribute not found\n");
+		return NL_SKIP;
+	}
+
+	msg_field.print(arg, attr);
+
+	return NL_SKIP;
+}
+
+static int mt76_vendor(int phy, int argc, char **argv)
+{
+	struct nl_msg *msg;
+	int ifindex = 0;
+
+	if (strcmp(argv[0], "rstats") == 0) {
+		if (argc != 1)
+			usage();
+	} else if (strcmp(argv[0], "ifstats") == 0) {
+		if (argc != 2)
+			usage();
+		ifindex = if_nametoindex(argv[1]);
+		if (ifindex == 0) {
+			fprintf(stderr, "Failed to find network device %s\n", argv[1]);
+			return 1;
+		}
+	} else
+		usage();
+
+	msg = unl_genl_msg(&unl, NL80211_CMD_VENDOR, true);
+	nla_put_u32(msg, NL80211_ATTR_VENDOR_ID, phy);
+	nla_put_u32(msg, NL80211_ATTR_VENDOR_ID, MTK_NL80211_VENDOR_ID);
+	nla_put_u32(msg, NL80211_ATTR_VENDOR_SUBCMD, ifindex > 0 ?
+				MTK_NL80211_VENDOR_SUBCMD_IFSTATS :
+				MTK_NL80211_VENDOR_SUBCMD_RSTATS);
+	nla_put_u32(msg, NL80211_ATTR_WIPHY, phy);
+	if (ifindex > 0)
+		nla_put_u32(msg, NL80211_ATTR_IFINDEX, ifindex);
+
+	unl_genl_request(&unl, msg, mt76_vendor_cb,
+					ifindex == 0 ? (void *)&vendor_rstats_field
+					: (void *)&vendor_ifstats_field);
+
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
 	const char *cmd, *phyname;
@@ -198,6 +252,8 @@ int main(int argc, char **argv)
 		ret = mt76_eeprom(phy, argc, argv);
 	else if (!strcmp(cmd, "fwlog"))
 		ret = mt76_fwlog(phyname, argc, argv);
+	else if (!strcmp(cmd, "vendor"))
+		ret = mt76_vendor(phy, argc, argv);
 	else
 		usage();
 
