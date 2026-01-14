@@ -590,6 +590,7 @@ int mt7915_dma_reset(struct mt7915_dev *dev, bool force)
 	mt7915_dma_disable(dev, force);
 
 	/* set wifi reset done, wait FE reset */
+#ifdef MT76_MTK_WOE
 	if (mtk_wed_device_active(wed) && atomic_read(&wed->fe_reset)) {
 		atomic_set(&wed->fe_reset, 0);
 		rtnl_lock();
@@ -597,7 +598,7 @@ int mt7915_dma_reset(struct mt7915_dev *dev, bool force)
 		rtnl_unlock();
 		wait_for_completion(&wed->fe_reset_done);
 	}
-
+#endif
 	/* reset hw queues */
 	for (i = 0; i < __MT_TXQ_MAX; i++) {
 		mt76_queue_reset(dev, dev->mphy.q_tx[i]);

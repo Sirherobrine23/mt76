@@ -15,6 +15,7 @@
 #include <linux/average.h>
 #include <linux/soc/mediatek/mtk_wed.h>
 #include <net/mac80211.h>
+#include <linux/pci.h>
 #include "util.h"
 #include "testmode.h"
 
@@ -1233,7 +1234,7 @@ mt76_testmode_entry_data(struct mt76_phy *phy, struct mt76_wcid *wcid)
 	return (struct mt76_testmode_entry_data *)((u8 *)wcid +
 						   phy->hw->sta_data_size);
 }
-
+#define list_entry_is_head(pos, head, member) (&pos->member == (head))
 #define mt76_tm_for_each_entry(phy, wcid, ed)				\
 	for (wcid = mt76_testmode_first_entry(phy),			\
 	     ed = mt76_testmode_entry_data(phy, wcid);			\
