@@ -4,7 +4,52 @@
 #include <linux/firmware.h>
 #include "mt7915.h"
 #include "eeprom.h"
+#ifdef CONFIG_BB_SOC
+static u32 mt7915_eeprom_read(struct mt7915_dev *dev, u32 offset)
+{
+	u8 *data = dev->mt76.eeprom.data;
 
+	if (data[offset] == 0xff){
+		dev_info(dev->mt76.dev, "%s get offset 0x%x value\n", __func__, offset);
+		mt7915_mcu_get_eeprom(dev, offset, NULL);
+	}
+
+	return data[offset];
+}
+
+//MT7915D eeprom 0x190 is 0x92
+//MT7915A eeprom 0x190 is 0x24
+static int bb_soc_mt7915_check_e2p_matched_hw(struct mt7915_dev *dev)
+{
+	u8 *eeprom = dev->mt76.eeprom.data;
+	u8 val;
+
+	val = mt7915_eeprom_read(dev, MT_EE_WIFI_CONF);
+	dev_info(dev->mt76.dev, "val:0x%x\n", val);
+
+	if(dev->dbdc_support && val == 0x92){
+		dev_info(dev->mt76.dev, "e2p matched with mt7915d hw\n");
+		return 0;
+	}
+	else if(val == 0x24){
+		dev_info(dev->mt76.dev, "e2p matched with mt7915a hw\n");
+		return 0;
+	}
+	else if(val == 0x12){
+		dev_info(dev->mt76.dev, "e2p matched with mt7916d hw\n");
+		return 0;
+	}
+	else{
+		dev_info(dev->mt76.dev,
+			"e2p table isn't matched with hw !!! 0x%04x=0x%x\n",MT_EE_WIFI_CONF, val);
+		// try to use efuse mode if e2p table from flash isn't matched with hw
+		dev->flash_mode = false;
+		memset(dev->mt76.eeprom.data, -1, MT7915_EEPROM_SIZE);
+		return -EINVAL;
+	}
+}
+#endif
+ 
 static int mt7915_eeprom_load_precal(struct mt7915_dev *dev)
 {
 	struct mt76_dev *mdev = &dev->mt76;
@@ -109,11 +154,19 @@ static int mt7915_eeprom_load(struct mt7915_dev *dev)
 	int ret;
 	u16 eeprom_size = mt7915_eeprom_size(dev);
 
-	ret = mt76_eeprom_init(&dev->mt76, eeprom_size);
+#ifndef CONFIG_BB_SOC
+	ret = mt76_eeprom_init(&dev->mt76, MT7915_EEPROM_SIZE);	
 	if (ret < 0)
 		return ret;
 
-	if (ret) {
+	if (ret) 
+#else
+	ret = bbsoc_load_eeprom_from_bin(&dev->mt76, MT7915_EEPROM_SIZE, dev->dbdc_support);
+
+	if (ret == 0)
+#endif
+	{
+		dev_info(dev->mt76.dev, "%s flash_mode\n", __func__);
 		dev->flash_mode = true;
 		dev->eeprom_mode = FLASH_MODE;
 	} else {
@@ -140,7 +193,11 @@ static int mt7915_eeprom_load(struct mt7915_dev *dev)
 		dev->eeprom_mode = EFUSE_MODE;
 	}
 
-	return mt7915_check_eeprom(dev);
+#ifdef CONFIG_BB_SOC
+	return 0;
+#else
+ 	return mt7915_check_eeprom(dev);
+#endif
 }
 
 static void mt7915_eeprom_parse_band_config(struct mt7915_phy *phy)
@@ -297,7 +354,9 @@ int mt7915_eeprom_init(struct mt7915_dev *dev)
 		if (ret)
 			return ret;
 	}
-
+#ifdef CONFIG_BB_SOC
+	bb_soc_mt7915_check_e2p_matched_hw(dev);
+#endif
 	mt7915_eeprom_rebonding(dev);
 
 	ret = mt7915_eeprom_load_precal(dev);

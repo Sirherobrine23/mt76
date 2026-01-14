@@ -1549,7 +1549,9 @@ s8 mt76_get_rate_power_limits(struct mt76_phy *phy,
 			      struct ieee80211_channel *chan,
 			      struct mt76_power_limits *dest,
 			      s8 target_power);
-
+#ifdef CONFIG_BB_SOC
+int bbsoc_load_eeprom_from_bin(struct mt76_dev *dev, int len, bool is_dbdc);
+#endif
 struct mt76_txwi_cache *
 mt76_token_release(struct mt76_dev *dev, int token, bool *wake);
 int mt76_token_consume(struct mt76_dev *dev, struct mt76_txwi_cache **ptxwi);

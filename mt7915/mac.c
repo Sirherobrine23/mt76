@@ -690,8 +690,8 @@ mt7915_mac_write_txwi_tm(struct mt7915_phy *phy, __le32 *txwi,
 			rate_idx += 4;
 
 		r = &phy->mt76->hw->wiphy->bands[band]->bitrates[rate_idx];
-		val = cck ? r->hw_value_short : r->hw_value;
-
+		//val = cck ? r->hw_value_short : r->hw_value;
+		val = r->hw_value;
 		mode = val >> 8;
 		rate_idx = val & 0xff;
 		break;
