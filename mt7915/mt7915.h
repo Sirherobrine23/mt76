@@ -226,6 +226,25 @@ struct mt7915_vif {
 
 	struct ieee80211_tx_queue_params queue_params[IEEE80211_NUM_ACS];
 	struct cfg80211_bitrate_mask bitrate_mask;
+#ifdef TX_RX_MT76_SPE_COUNTERS	 //for per bss
+	u64 tx_br_cnt;
+	u64 tx_mr_cnt;
+	u64 tx_packets;
+	u64 tx_bytes;
+	u64 tx_errors;
+	u64 tx_retry;
+	u64 tx_unicast;
+
+	u64 rx_br_cnt;
+	u64 rx_mr_cnt;
+	u64 rx_packets;
+	u64 rx_bytes;
+	u64 rx_errors;
+	u64 rx_drops;
+	u64 rx_unicast;
+#endif
+	
+	
 };
 
 /* per-phy stats.  */

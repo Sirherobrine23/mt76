@@ -292,6 +292,17 @@ struct mt76_sta_stats {
 	u32 rx_packets;
 	u32 rx_errors;
 	u32 rx_drops;
+	
+#ifdef TX_RX_MT76_SPE_COUNTERS 
+    u64 tx_multi;
+	u64 tx_br;
+	u64 rx_br;
+	u64 rx_mr;	
+	u64 tx_bytes_tem;
+	u64 tx_packets_tem;
+	u64 tx_error_tem;
+	u64 tx_retries_tem;
+#endif 	
 };
 
 enum mt76_wcid_flags {
@@ -302,6 +313,10 @@ enum mt76_wcid_flags {
 };
 
 #define MT76_N_WCIDS 544
+#ifdef TX_RX_MT76_SPE_COUNTERS 
+#define IS_MULTICAST_MAC_ADDR(Addr)		((((Addr[0]) & 0x01) == 0x01) && ((Addr[0]) == 0x01))
+#define IS_BROADCAST_MAC_ADDR(Addr)		((((Addr[0]) & 0xff) == 0xff))
+#endif
 
 /* stored in ieee80211_tx_info::hw_queue */
 #define MT_TX_HW_QUEUE_PHY		GENMASK(3, 2)

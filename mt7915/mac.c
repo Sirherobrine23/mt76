@@ -297,6 +297,9 @@ mt7915_mac_fill_rx(struct mt7915_dev *dev, struct sk_buff *skb,
 	u8 remove_pad, amsdu_info;
 	u8 mode = 0, qos_ctl = 0;
 	struct mt7915_sta *msta = NULL;
+#ifdef TX_RX_MT76_SPE_COUNTERS	
+	struct mt7915_sta *msta1 = NULL;
+#endif	
 	u32 csum_status = *(u32 *)skb->cb;
 	bool hdr_trans;
 	u16 hdr_gap;
@@ -547,6 +550,37 @@ mt7915_mac_fill_rx(struct mt7915_dev *dev, struct sk_buff *skb,
 		}
 
 		hdr = mt76_skb_get_hdr(skb);
+#ifdef TX_RX_MT76_SPE_COUNTERS	
+
+		if (status->wcid)	
+		{
+			if (IS_BROADCAST_MAC_ADDR(hdr->addr1))
+			{			
+				msta1=container_of(mt7915_rx_get_wcid(dev, idx, 1), struct mt7915_sta, wcid);
+				msta1->wcid.stats.rx_br++;
+
+			    if(msta1 && msta1->vif){
+			       msta1->vif->rx_br_cnt++;
+			    }	
+
+			}
+
+	
+
+  	 		if(IS_MULTICAST_MAC_ADDR(hdr->addr1)){
+				msta1=container_of(mt7915_rx_get_wcid(dev, idx, 1), struct mt7915_sta, wcid);
+				msta1->wcid.stats.rx_mr++;
+				if(msta){
+					msta->wcid.stats.rx_mr++;
+	       	    }
+			    if(msta && msta->vif){
+			       msta->vif->rx_mr_cnt++;
+			    }	
+			}
+   		
+		}
+#endif		
+		
 		fc = hdr->frame_control;
 		if (ieee80211_is_data_qos(fc)) {
 			seq_ctrl = le16_to_cpu(hdr->seq_ctrl);
@@ -807,6 +841,10 @@ int mt7915_tx_prepare_skb(struct mt76_dev *mdev, void *txwi_ptr,
 	int id, i, nbuf = tx_info->nbuf - 1;
 	u8 *txwi = (u8 *)txwi_ptr;
 	int pid;
+#ifdef TX_RX_MT76_SPE_COUNTERS	
+	struct mt76_phy *mphy = &dev->mt76.phy;
+#endif
+	
 #ifdef CONFIG_SOC_WOE 
 	struct wlan_tx_info_woe tx_info_woe;
 #endif
@@ -872,7 +910,30 @@ int mt7915_tx_prepare_skb(struct mt76_dev *mdev, void *txwi_ptr,
 
 	if (vif) {
 		struct mt7915_vif *mvif = (struct mt7915_vif *)vif->drv_priv;
+#ifdef TX_RX_MT76_SPE_COUNTERS	
+		if(IS_BROADCAST_MAC_ADDR(hdr->addr1))
 
+		{
+			mvif->tx_br_cnt++;
+
+		}
+
+		if (ieee80211_has_order(hdr->frame_control))
+		{
+		if(IS_MULTICAST_MAC_ADDR(hdr->addr1))
+			
+		{		
+			mvif->tx_mr_cnt++;
+
+			//printk("mac is %02x-%02x-%02x-%02x-%02x-%02x",hdr->addr1[0],hdr->addr1[1],hdr->addr1[2],hdr->addr1[3],hdr->addr1[4],hdr->addr1[5]);
+			
+		}
+		}else
+		{
+			//printk("the is no hdr.frame_control \n");
+		}
+	
+#endif
 		txp->bss_idx = mvif->mt76.idx;
 #ifdef CONFIG_SOC_WOE 		
 		tx_info_woe.bssidx = mvif->mt76.idx;
