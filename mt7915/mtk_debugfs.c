@@ -2735,6 +2735,23 @@ exit:
 DEFINE_DEBUGFS_ATTRIBUTE(fops_muru_onoff, mt7915_muru_onoff_get,
                        mt7915_muru_onoff_set, "%llx\n");
 
+extern int mbss_static_enable;
+static int mt7915_mbss_static_onoff_set(void *data, u64 val)
+{
+       struct mt7915_dev *dev = data;
+
+       if (val > 31) {
+               printk("Wrong value! The value is between 0 ~ 31.\n");
+               goto exit;
+       }
+
+       mbss_static_enable = val;
+exit:
+       return 0;
+}
+DEFINE_DEBUGFS_ATTRIBUTE(fops_mbss_static_onoff, mt7915_muru_onoff_get,
+						mt7915_mbss_static_onoff_set, "%llx\n");
+
 static int mt7915_amsduinfo_read(struct seq_file *s, void *data)
 {
 	struct mt7915_dev *dev = dev_get_drvdata(s->private);
@@ -3278,6 +3295,7 @@ int mt7915_mtk_init_debugfs(struct mt7915_phy *phy, struct dentry *dir)
 	mt7915_mcu_fw_log_2_host(dev, MCU_FW_LOG_WM, 0);
 
 	debugfs_create_file("muru_onoff", 0600, dir, dev, &fops_muru_onoff);
+	debugfs_create_file("mbss_static_onoff", 0600, dir, dev, &fops_mbss_static_onoff);
 	debugfs_create_file("fw_debug_module", 0600, dir, dev,
 			    &fops_fw_debug_module);
 	debugfs_create_file("fw_debug_level", 0600, dir, dev,
