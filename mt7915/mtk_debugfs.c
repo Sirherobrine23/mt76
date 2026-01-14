@@ -745,11 +745,21 @@ mt7915_show_host_dma_info(struct seq_file *s, struct mt7915_dev *dev)
 		      "Name", "Base", "Cnt", "CIDX", "DIDX", "QCnt");
 	dump_dma_tx_ring_info(s, dev, "T16:FWDL", MT_DBG_TX_RING_CTRL(0));
 	dump_dma_tx_ring_info(s, dev, "T17:Cmd(H2WM)", MT_DBG_TX_RING_CTRL(1));
-	dump_dma_tx_ring_info(s, dev, "T18:TXD0(H2WA)", MT_DBG_TX_RING_CTRL(2));
-	dump_dma_tx_ring_info(s, dev, "T19:TXD1(H2WA)", MT_DBG_TX_RING_CTRL(3));
+	//if (mtk_wed_device_active(&dev->mt76.mmio.wed)) {
+	if(woe_enable()){
+		dump_dma_tx_ring_info(s, dev, "T18:TXD0(H2WA)",  MT_DBG_WFDMA_WED_TX_CTRL(0));
+		dump_dma_tx_ring_info(s, dev, "T19:TXD1(H2WA)",  MT_DBG_WFDMA_WED_TX_CTRL(1));
+	} else {
+		dump_dma_tx_ring_info(s, dev, "T18:TXD0(H2WA)", MT_DBG_TX_RING_CTRL(2));
+		dump_dma_tx_ring_info(s, dev, "T19:TXD1(H2WA)", MT_DBG_TX_RING_CTRL(3));
+	}
 	dump_dma_tx_ring_info(s, dev, "T20:Cmd(H2WA)", MT_DBG_TX_RING_CTRL(4));
 	dump_dma_rx_ring_info(s, dev, "R0:Event(WM2H)", MT_DBG_RX_EVENT_RING_CTRL(0));
-	dump_dma_rx_ring_info(s, dev, "R1:Event0(WA2H)", MT_DBG_RX_EVENT_RING_CTRL(1));
+	//if (mtk_wed_device_active(&dev->mt76.mmio.wed))
+	if(woe_enable())
+		dump_dma_rx_ring_info(s, dev, "R1:TxDone(WA2H)", MT_DBG_WFDMA_WED_RX_CTRL(1));
+	else
+		dump_dma_rx_ring_info(s, dev, "R1:Event0(WA2H)", MT_DBG_RX_EVENT_RING_CTRL(1));
 	dump_dma_rx_ring_info(s, dev, "R2:Event1(WA2H)", MT_DBG_RX_EVENT_RING_CTRL(2));
 
 	seq_printf(s, "HOST_DMA1 PCIe 1 Ring Configuration\n");
@@ -968,12 +978,14 @@ static int mt7915_trinfo_read(struct seq_file *s, void *data)
 	struct mt7915_dev *dev = dev_get_drvdata(s->private);
 	const struct hif_pci_tx_ring_desc *tx_ring_layout;
 	const struct hif_pci_rx_ring_desc *rx_ring_layout;
+	//struct mtk_wed_device *wed = &dev->mt76.mmio.wed;
 	u32 tx_ring_num, rx_ring_num;
 	u32 tbase[5], tcnt[5];
 	u32 tcidx[5], tdidx[5];
 	u32 rbase[6], rcnt[6];
 	u32 rcidx[6], rdidx[6];
 	int idx;
+	bool flags = false;
 
 	if(is_mt7915(&dev->mt76)) {
 		tx_ring_layout = &mt7915_tx_ring_layout[0];
@@ -988,23 +1000,84 @@ static int mt7915_trinfo_read(struct seq_file *s, void *data)
 	}
 
 	for (idx = 0; idx < tx_ring_num; idx++) {
-		tbase[idx] = mt76_rr(dev, MT_DBG_TX_RING_CTRL(idx));
-		tcnt[idx]  = mt76_rr(dev, MT_DBG_TX_RING_CTRL(idx) + 0x04);
-		tcidx[idx] = mt76_rr(dev, MT_DBG_TX_RING_CTRL(idx) + 0x08);
-		tdidx[idx] = mt76_rr(dev, MT_DBG_TX_RING_CTRL(idx) + 0x0c);
+		//if (mtk_wed_device_active(wed) &&
+		//    (tx_ring_layout[idx].ring_attr == HIF_TX_DATA)) {
+		if(0){
+			struct mt76_phy *phy = dev->mt76.phys[MT_BAND0];
+			struct mt76_phy *ext_phy = dev->mt76.phys[MT_BAND1];
+			struct mt76_queue *q;
+
+			tbase[idx] = tcnt[idx] = tcidx[idx] = tdidx[idx] = 0;
+
+			if (!phy)
+				continue;
+
+			if (flags && !ext_phy)
+				continue;
+
+			if (flags && ext_phy)
+				phy = ext_phy;
+
+			q = phy->q_tx[0];
+
+			if (q->wed_regs) {
+				//tbase[idx] = mtk_wed_device_reg_read(wed, q->wed_regs);
+				//tcnt[idx]  = mtk_wed_device_reg_read(wed, q->wed_regs + 0x04);
+				//tcidx[idx] = mtk_wed_device_reg_read(wed, q->wed_regs + 0x08);
+				//tdidx[idx] = mtk_wed_device_reg_read(wed, q->wed_regs + 0x0c);
+			}
+
+			flags = true;
+		} else {
+			tbase[idx] = mt76_rr(dev, MT_DBG_TX_RING_CTRL(idx));
+			tcnt[idx]  = mt76_rr(dev, MT_DBG_TX_RING_CTRL(idx) + 0x04);
+			tcidx[idx] = mt76_rr(dev, MT_DBG_TX_RING_CTRL(idx) + 0x08);
+			tdidx[idx] = mt76_rr(dev, MT_DBG_TX_RING_CTRL(idx) + 0x0c);
+		}
 	}
 
 	for (idx = 0; idx < rx_ring_num; idx++) {
-		if (idx < 2) {
-			rbase[idx] = mt76_rr(dev, MT_DBG_RX_DATA_RING_CTRL(idx));
-			rcnt[idx]  = mt76_rr(dev, MT_DBG_RX_DATA_RING_CTRL(idx) + 0x04);
-			rcidx[idx] = mt76_rr(dev, MT_DBG_RX_DATA_RING_CTRL(idx) + 0x08);
-			rdidx[idx] = mt76_rr(dev, MT_DBG_RX_DATA_RING_CTRL(idx) + 0x0c);
+		if (rx_ring_layout[idx].ring_attr == HIF_RX_DATA) {
+			//if (mtk_wed_device_active(wed) && mtk_wed_get_rx_capa(wed)) {
+			if(0){
+				struct mt76_queue *q = &dev->mt76.q_rx[MT_RXQ_MAIN];
+
+				rbase[idx] = rcnt[idx] = rcidx[idx] = rdidx[idx] = 0;
+
+				if (idx == 1)
+					q = &dev->mt76.q_rx[MT_RXQ_BAND1];
+
+				if (q->wed_regs) {
+					//rbase[idx] = mtk_wed_device_reg_read(wed, q->wed_regs);
+					//rcnt[idx]  = mtk_wed_device_reg_read(wed, q->wed_regs + 0x04);
+					//rcidx[idx] = mtk_wed_device_reg_read(wed, q->wed_regs + 0x08);
+					//rdidx[idx] = mtk_wed_device_reg_read(wed, q->wed_regs + 0x0c);
+				}
+			} else {
+				rbase[idx] = mt76_rr(dev, MT_DBG_RX_DATA_RING_CTRL(idx));
+				rcnt[idx]  = mt76_rr(dev, MT_DBG_RX_DATA_RING_CTRL(idx) + 0x04);
+				rcidx[idx] = mt76_rr(dev, MT_DBG_RX_DATA_RING_CTRL(idx) + 0x08);
+				rdidx[idx] = mt76_rr(dev, MT_DBG_RX_DATA_RING_CTRL(idx) + 0x0c);
+			}
 		} else {
-			rbase[idx] = mt76_rr(dev, MT_DBG_RX_EVENT_RING_CTRL(idx - 2));
-			rcnt[idx]  = mt76_rr(dev, MT_DBG_RX_EVENT_RING_CTRL(idx - 2) + 0x04);
-			rcidx[idx] = mt76_rr(dev, MT_DBG_RX_EVENT_RING_CTRL(idx - 2) + 0x08);
-			rdidx[idx] = mt76_rr(dev, MT_DBG_RX_EVENT_RING_CTRL(idx - 2) + 0x0c);
+			//if (mtk_wed_device_active(wed) && rx_ring_layout[idx].flags) {
+			if(0){
+				struct mt76_queue *q = &dev->mt76.q_rx[MT_RXQ_MAIN_WA];
+
+				if (is_mt7915(&dev->mt76))
+					q = &dev->mt76.q_rx[MT_RXQ_MCU_WA];
+
+				//rbase[idx] = mtk_wed_device_reg_read(wed, q->wed_regs);
+				//rcnt[idx]  = mtk_wed_device_reg_read(wed, q->wed_regs + 0x04);
+				///rcidx[idx] = mtk_wed_device_reg_read(wed, q->wed_regs + 0x08);
+				//rdidx[idx] = mtk_wed_device_reg_read(wed, q->wed_regs + 0x0c);
+
+			} else {
+				rbase[idx] = mt76_rr(dev, MT_DBG_RX_EVENT_RING_CTRL(idx - 2));
+				rcnt[idx]  = mt76_rr(dev, MT_DBG_RX_EVENT_RING_CTRL(idx - 2) + 0x04);
+				rcidx[idx] = mt76_rr(dev, MT_DBG_RX_EVENT_RING_CTRL(idx - 2) + 0x08);
+				rdidx[idx] = mt76_rr(dev, MT_DBG_RX_EVENT_RING_CTRL(idx - 2) + 0x0c);
+			}
 		}
 	}
 
@@ -3129,6 +3202,66 @@ mt7915_sw_aci_set(void *data, u64 val)
 DEFINE_DEBUGFS_ATTRIBUTE(fops_sw_aci, NULL,
 			 mt7915_sw_aci_set, "%llx\n");
 
+static int mt7915_reset_counter(void *data, u64 val)
+{
+	struct mt7915_phy *phy = data;
+	struct mt7915_dev *dev = phy->dev;
+	struct mt76_wcid *wcid;
+
+	/* Clear the firmware counters */
+	mt7915_mcu_get_tx_stat_wa(dev, dev->wlan_idx);
+	mt7915_get_tx_stat(phy, dev->wlan_idx);
+
+	rcu_read_lock();
+	wcid = rcu_dereference(dev->mt76.wcid[dev->wlan_idx]);
+	if (!wcid)
+		return -EINVAL;
+
+	memset(&wcid->stats, 0, sizeof(struct mt76_sta_stats));
+
+	rcu_read_unlock();
+
+	return 0;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(fops_reset_counter, NULL,
+			 mt7915_reset_counter, "%lld\n");
+
+static int
+mt7915_per_read(struct seq_file *s, void *data)
+{
+	struct mt7915_dev *dev = dev_get_drvdata(s->private);
+	struct mt76_sta_stats *stats;
+	struct mt76_wcid *wcid;
+	int ret;
+	u8 phy_idx;
+
+	if (!dev->mt76.wcid[dev->wlan_idx])
+		return -EINVAL;
+
+	phy_idx = dev->mt76.wcid[dev->wlan_idx]->phy_idx;
+
+	ret = mt7915_get_tx_stat(dev->mt76.phys[phy_idx]->priv, dev->wlan_idx);
+	if (ret)
+		return ret;
+
+	rcu_read_lock();
+	wcid = rcu_dereference(dev->mt76.wcid[dev->wlan_idx]);
+	if (!wcid)
+		return -EINVAL;
+
+	stats = &wcid->stats;
+
+	seq_printf(s, "sta %d, tx_mpdu_cnt = %u, tx_failed = %u,  PER = %u.%u%%\n", dev->wlan_idx,
+		   stats->tx_mpdu_cnt, stats->tx_failed,
+		   stats->tx_mpdu_cnt ? stats->tx_failed * 1000 / stats->tx_mpdu_cnt / 10 : 0,
+		   stats->tx_mpdu_cnt ? stats->tx_failed * 1000 / stats->tx_mpdu_cnt % 10 : 0);
+
+	rcu_read_unlock();
+
+	return 0;
+}
+
 int mt7915_mtk_init_debugfs(struct mt7915_phy *phy, struct dentry *dir)
 {
 	struct mt7915_dev *dev = phy->dev;
@@ -3221,6 +3354,8 @@ int mt7915_mtk_init_debugfs(struct mt7915_phy *phy, struct dentry *dir)
 				    mt7915_show_eeprom_mode);
 	debugfs_create_file("sw_aci", 0600, dir, dev,
 			    &fops_sw_aci);
+	debugfs_create_file("reset_counter", 0200, dir, dev, &fops_reset_counter);
+	debugfs_create_devm_seqfile(dev->mt76.dev, "per", dir, mt7915_per_read);
 	return 0;
 }
 #endif

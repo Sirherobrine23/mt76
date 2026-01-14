@@ -36,8 +36,11 @@ enum rx_pkt_type {
 #define MT_TX_FREE_LATENCY		GENMASK(12, 0)
 /* 0: success, others: dropped */
 #define MT_TX_FREE_MSDU_ID		GENMASK(30, 16)
+#define MT_TX_FREE_TX_COUNT		GENMASK(12, 0)
+#define MT_TX_FREE_TX_COUNT_V3		GENMASK(27, 24)
 #define MT_TX_FREE_PAIR			BIT(31)
-#define MT_TX_FREE_MPDU_HEADER		BIT(30)
+#define MT_TX_FREE_MPDU_HEADER		BIT(15)
+#define MT_TX_FREE_MPDU_HEADER_V3	BIT(30)
 #define MT_TX_FREE_MSDU_ID_V3		GENMASK(14, 0)
 
 /* will support this field in further revision */

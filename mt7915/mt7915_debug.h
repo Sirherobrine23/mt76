@@ -1057,6 +1057,7 @@ struct hif_pci_rx_ring_desc {
 	u16 max_rx_process_cnt;
 	u16 max_sw_read_idx_inc;
 	char *const ring_info;
+	bool flags;
 };
 
 const struct hif_pci_tx_ring_desc mt7915_tx_ring_layout[] = {
@@ -1115,7 +1116,8 @@ const struct hif_pci_rx_ring_desc mt7915_rx_ring_layout[] = {
 	 .hw_int_mask = MT_DBG_INT_DMA1_R1_DONE,
 	 .ring_size = 1024,
 	 .ring_attr = HIF_RX_EVENT,
-	 .ring_info = "event from WA band0"
+	 .ring_info = "event from WA band0",
+	 .flags = true
 	},
 	{
 	 .hw_int_mask = MT_DBG_INT_DMA1_R2_DONE,
@@ -1187,7 +1189,8 @@ const struct hif_pci_rx_ring_desc mt7986_rx_ring_layout[] = {
 	 .hw_int_mask = MT_DBG_INT_DMA0_R2_DONE,
 	 .ring_size = 1024,
 	 .ring_attr = HIF_RX_EVENT,
-	 .ring_info = "STS WA band0"
+	 .ring_info = "STS WA band0",
+	 .flags = true
 	},
 	{
 	 .hw_int_mask = MT_DBG_INT_DMA0_R3_DONE,

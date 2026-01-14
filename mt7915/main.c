@@ -674,10 +674,12 @@ static void mt7915_bss_info_changed(struct ieee80211_hw *hw,
 		mt7915_update_bss_color(hw, vif, &info->he_bss_color);
 
 	if (changed & (BSS_CHANGED_BEACON |
-		       BSS_CHANGED_BEACON_ENABLED |
-		       BSS_CHANGED_UNSOL_BCAST_PROBE_RESP |
-		       BSS_CHANGED_FILS_DISCOVERY))
+		       BSS_CHANGED_BEACON_ENABLED))
 		mt7915_mcu_add_beacon(hw, vif, info->enable_beacon, changed);
+
+	if (changed & (BSS_CHANGED_UNSOL_BCAST_PROBE_RESP |
+		       BSS_CHANGED_FILS_DISCOVERY))
+		mt7915_mcu_add_inband_discov(dev, vif, changed);
 
 	mutex_unlock(&dev->mt76.mutex);
 }
@@ -1131,7 +1133,7 @@ static void mt7915_sta_statistics(struct ieee80211_hw *hw,
 	if (woe_enable()) {
 		sinfo->tx_bytes = msta->wcid.stats.tx_bytes;
 		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_TX_BYTES64);
-
+		/*
 		sinfo->tx_packets = msta->wcid.stats.tx_packets;
 		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_TX_PACKETS);
 
@@ -1140,6 +1142,7 @@ static void mt7915_sta_statistics(struct ieee80211_hw *hw,
 
 		sinfo->tx_retries = msta->wcid.stats.tx_retries;
 		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_TX_RETRIES);
+		*/
 		#if 0
 		if (mtk_wed_get_rx_capa(&phy->dev->mt76.mmio.wed)) {
 			sinfo->rx_bytes = msta->wcid.stats.rx_bytes;
@@ -1151,6 +1154,19 @@ static void mt7915_sta_statistics(struct ieee80211_hw *hw,
 		#endif
 	}
 #endif
+	sinfo->tx_retries = msta->wcid.stats.tx_retries;
+	sinfo->filled |= BIT_ULL(NL80211_STA_INFO_TX_RETRIES);
+
+	if (!mt7915_mcu_get_tx_stat_wa(phy->dev, msta->wcid.idx)) {
+		sinfo->tx_packets = msta->wcid.stats.tx_packets;
+		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_TX_PACKETS);
+	}
+
+	if (!mt7915_get_tx_stat(phy, msta->wcid.idx)) {
+		sinfo->tx_failed = msta->wcid.stats.tx_failed;
+		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_TX_FAILED);
+	}
+
 	sinfo->ack_signal = (s8)msta->ack_signal;
 	sinfo->filled |= BIT_ULL(NL80211_STA_INFO_ACK_SIGNAL);
 
@@ -1630,7 +1646,22 @@ mt7915_net_fill_receive_path(struct ieee80211_hw *hw,
 }
 
 #endif
+#ifdef CONFIG_NET_MEDIATEK_SOC_WED
+static int mt7915_net_setup_tc(struct ieee80211_hw *hw,
+			      struct net_device *ndev,
+			      int type, void *type_data)
+{
+	struct mt7915_dev *dev = mt7915_hw_dev(hw);
+	struct mtk_wed_device *wed = &dev->mt76.mmio.wed;
 
+	if (!mtk_wed_device_active(wed))
+		return -ENODEV;
+
+	mtk_wed_device_setup_tc(wed, ndev, type, type_data);
+
+	return 0;
+}
+#endif
 const struct ieee80211_ops mt7915_ops = {
 	.tx = mt7915_tx,
 	.start = mt7915_start,
@@ -1682,5 +1713,7 @@ const struct ieee80211_ops mt7915_ops = {
 #ifdef CONFIG_NET_MEDIATEK_SOC_WED
 	.net_fill_forward_path = mt7915_net_fill_forward_path,
 	.net_fill_receive_path = mt7915_net_fill_receive_path,
+	.net_setup_tc = mt7915_net_setup_tc,
 #endif
+
 };

@@ -907,6 +907,47 @@ mt7915_tm_txbf_phase_cal(struct mt7915_phy *phy, u16 *val)
 	return mt76_mcu_send_msg(&dev->mt76, MCU_EXT_CMD(TXBF_ACTION), &req,
 				 sizeof(req), true);
 }
+int mt7915_tm_txbf_status_read(struct mt7915_dev *dev, struct sk_buff *skb)
+{
+#define BF_PFMU_TAG	16
+#define BF_CAL_PHASE	21
+	u8 format_id;
+
+	skb_pull(skb, sizeof(struct mt76_connac2_mcu_rxd));
+	format_id = *(u8 *)skb->data;
+
+	if (format_id == BF_PFMU_TAG) {
+		struct mt7915_tm_pfmu_tag *tag = dev->test.txbf_pfmu_tag;
+
+		skb_pull(skb, 8);
+		memcpy(tag, skb->data, sizeof(struct mt7915_tm_pfmu_tag));
+	} else if (format_id == BF_CAL_PHASE) {
+		struct mt7915_tm_ibf_cal_info *cal;
+		struct mt7915_tm_txbf_phase *phase =
+			(struct mt7915_tm_txbf_phase *)dev->test.txbf_phase_cal;
+
+		cal = (struct mt7915_tm_ibf_cal_info *)skb->data;
+		switch (cal->cal_type) {
+		case IBF_PHASE_CAL_NORMAL:
+		case IBF_PHASE_CAL_NORMAL_INSTRUMENT:
+			if (cal->group_l_m_n != GROUP_M)
+				break;
+			phase = &phase[cal->group];
+			memcpy(&phase->phase, cal->buf + 16, sizeof(phase->phase));
+			phase->status = cal->status;
+			break;
+		case IBF_PHASE_CAL_VERIFY:
+		case IBF_PHASE_CAL_VERIFY_INSTRUMENT:
+			break;
+		default:
+			break;
+		}
+	}
+
+	wake_up(&dev->mt76.tx_wait);
+
+	return 0;
+}
 
 static int
 mt7915_tm_txbf_profile_update_all(struct mt7915_phy *phy, u16 *val)
@@ -2391,6 +2432,11 @@ mt7915_tm_set_state(struct mt76_phy *mphy, enum mt76_testmode_state state)
 	struct mt7915_phy *phy = mphy->priv;
 	enum mt76_testmode_state prev_state = td->state;
 
+	if (!phy->monitor_vif) {
+		dev_err(phy->dev->mt76.dev, "Please make sure monitor interface is up\n");
+		return -ENOTCONN;
+	}
+
 	mphy->test.state = state;
 
 	if (prev_state == MT76_TM_STATE_TX_FRAMES ||
@@ -2521,7 +2567,7 @@ static int
 mt7915_tm_write_back_to_efuse(struct mt7915_dev *dev)
 {
 	struct mt7915_mcu_eeprom_info req = {};
-	u8 *eeprom = dev->mt76.eeprom.data;
+	u8 read_buf[MT76_TM_EEPROM_BLOCK_SIZE], *eeprom = dev->mt76.eeprom.data;
 	int i, ret = -EINVAL;
 
 	/* prevent from damaging chip id in efuse */
@@ -2530,7 +2576,14 @@ mt7915_tm_write_back_to_efuse(struct mt7915_dev *dev)
 
 	for (i = 0; i < mt7915_eeprom_size(dev); i += MT76_TM_EEPROM_BLOCK_SIZE) {
 		req.addr = cpu_to_le32(i);
-		memcpy(&req.data, eeprom + i, MT76_TM_EEPROM_BLOCK_SIZE);
+		memcpy(req.data, eeprom + i, MT76_TM_EEPROM_BLOCK_SIZE);
+
+		ret = mt7915_mcu_get_eeprom(dev, i, read_buf);
+		if (ret < 0)
+			return ret;
+
+		if (!memcmp(req.data, read_buf, MT76_TM_EEPROM_BLOCK_SIZE))
+			continue;
 
 		ret = mt76_mcu_send_msg(&dev->mt76, MCU_EXT_CMD(EFUSE_ACCESS),
 					&req, sizeof(req), true);
@@ -2541,6 +2594,7 @@ mt7915_tm_write_back_to_efuse(struct mt7915_dev *dev)
 out:
 	return ret;
 }
+
 
 static int
 mt7915_tm_set_eeprom(struct mt76_phy *mphy, u32 offset, u8 *val, u8 action)
