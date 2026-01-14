@@ -397,12 +397,12 @@ mt7915_tm_entry_add(struct mt7915_phy *phy, u8 aid)
 		memcpy(sta->addr, td->addr[0], ETH_ALEN);
 
 	if (td->tx_rate_mode >= MT76_TM_TX_MODE_HT)
-		memcpy(&sta->deflink.ht_cap, &sband->ht_cap, sizeof(sta->deflink.ht_cap));
+		memcpy(&sta->ht_cap, &sband->ht_cap, sizeof(sta->ht_cap));
 	if (td->tx_rate_mode >= MT76_TM_TX_MODE_VHT)
-		memcpy(&sta->deflink.vht_cap, &sband->vht_cap, sizeof(sta->deflink.vht_cap));
+		memcpy(&sta->vht_cap, &sband->vht_cap, sizeof(sta->vht_cap));
 	if (td->tx_rate_mode >= MT76_TM_TX_MODE_HE_SU)
-		memcpy(&sta->deflink.he_cap, &sdata[NL80211_IFTYPE_STATION].he_cap,
-		       sizeof(sta->deflink.he_cap));
+		memcpy(&sta->he_cap, &sdata[NL80211_IFTYPE_STATION].he_cap,
+		       sizeof(sta->he_cap));
 	sta->aid = aid;
 	sta->wme = 1;
 
