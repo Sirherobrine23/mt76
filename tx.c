@@ -127,16 +127,17 @@ mt76_tx_status_skb_add(struct mt76_dev *dev, struct mt76_wcid *wcid,
 	if (info->flags & IEEE80211_TX_CTL_NO_ACK)
 		return MT_PACKET_ID_NO_ACK;
 
-	//if (mtk_wed_device_active(&dev->mmio.wed) &&
-	if(woe_enable() &&
-	    ((info->flags & IEEE80211_TX_CTL_HW_80211_ENCAP) ||
-	    ieee80211_is_data(hdr->frame_control)))
-		return MT_PACKET_ID_WED;
-
 	if (!(info->flags & (IEEE80211_TX_CTL_REQ_TX_STATUS |
-			     IEEE80211_TX_CTL_RATE_CTRL_PROBE)))
-		return MT_PACKET_ID_NO_SKB;
+			     IEEE80211_TX_CTL_RATE_CTRL_PROBE))){
+	
+	if (woe_enable() &&
+		    ((info->flags & IEEE80211_TX_CTL_HW_80211_ENCAP) ||
+		    ieee80211_is_data(hdr->frame_control)))
+			return MT_PACKET_ID_WED;
 
+		return MT_PACKET_ID_NO_SKB;
+	}
+			
 	spin_lock_bh(&dev->status_lock);
 
 	pid = idr_alloc(&wcid->pktid, skb, MT_PACKET_ID_FIRST,
