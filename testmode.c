@@ -52,8 +52,12 @@ mt76_testmode_queue_tx(struct mt76_phy *phy, struct mt76_wcid *wcid,
 		if (ret < 0)
 			break;
 
+ 		td->tx_pending--;
 		count--;
-		td->tx_pending--;
+
+		/* tx_count == UINT_MAX for continuous tx */
+		if (td->tx_count != UINT_MAX)
+			td->tx_pending--;
 		td->tx_queued++;
 
 		if (td->tx_rate_mode != MT76_TM_TX_MODE_HE_MU)
