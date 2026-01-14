@@ -7,6 +7,9 @@
 #include "mac.h"
 #include "eeprom.h"
 #include <linux/moduleparam.h>
+#ifdef CONFIG_SOC_WOE 
+#include "../mt76_woe.h"
+#endif
 
 #define fw_name(_dev, name, ...)	({			\
 	char *_fw;						\
@@ -1740,9 +1743,11 @@ int mt7915_mcu_add_sta(struct mt7915_dev *dev, struct ieee80211_vif *vif,
 		return ret;
 	}
 out:
+#if 0
 	ret = mt76_connac_mcu_sta_wed_update(&dev->mt76, skb);
 	if (ret)
 		return ret;
+#endif
 
 	return mt76_mcu_skb_send_msg(&dev->mt76, skb,
 				     MCU_EXT_CMD(STA_REC_UPDATE), true);
@@ -2333,10 +2338,16 @@ mt7915_mcu_init_rx_airtime(struct mt7915_dev *dev)
 	return mt76_mcu_send_msg(&dev->mt76, MCU_EXT_CMD(RX_AIRTIME_CTRL), &req,
 				 sizeof(req), true);
 }
-
+#define MTK_WED_REV_ID_MAJIOR GENMASK(7, 0)
+#define MTK_WED_REV_ID_MINOR GENMASK(27, 16)
+#define MTK_WED_V1 0x001
+extern unsigned int wed_ver_id;
 int mt7915_mcu_init_firmware(struct mt7915_dev *dev)
 {
 	int ret;
+	unsigned short dev_ver = 0;
+	unsigned short recv_id = 0;
+	unsigned short ver_tmp = 0;	
 
 	/* force firmware operation mode into normal state,
 	 * which should be set before firmware download stage.
@@ -2365,7 +2376,7 @@ int mt7915_mcu_init_firmware(struct mt7915_dev *dev)
 	ret = mt7915_mcu_fw_log_2_host(dev, MCU_FW_LOG_WA, 0);
 	if (ret)
 		return ret;
-
+#if 0
 	if (mtk_wed_device_active(&dev->mt76.mmio.wed)) {
 		if (is_mt7915(&dev->mt76) ||
 		    !mtk_wed_get_rx_capa(&dev->mt76.mmio.wed))
@@ -2386,7 +2397,30 @@ int mt7915_mcu_init_firmware(struct mt7915_dev *dev)
 		if (ret)
 			return ret;
 	}
+#endif
+#ifdef CONFIG_SOC_WOE 
+if(woe_enable())
+{
+	dev_ver = FIELD_GET(MTK_WED_REV_ID_MAJIOR, wed_ver_id);
+	if(dev_ver > MTK_WED_V1)
+		ver_tmp = FIELD_GET(MTK_WED_REV_ID_MINOR, wed_ver_id);
+	recv_id = ((dev_ver << 28) | ver_tmp << 16);
+	
+	printk("%s:%d dev_ver=%u recv_id=%u !!!\n",__func__,__LINE__,dev_ver,recv_id);
+	
+	if (is_mt7915(&dev->mt76) || dev_ver == MTK_WED_V1)
+		mt7915_mcu_wa_cmd(dev, MCU_WA_PARAM_CMD(CAPABILITY),
+				  0, 0, 0);
+	else
+		mt7915_mcu_wa_cmd(dev, MCU_WA_PARAM_CMD(SET),
+				  MCU_WA_PARAM_WED_VERSION,
+				  recv_id, 0);
 
+	mt7915_mcu_set_red(dev, true);
+}
+else
+#endif
+	mt7915_mcu_set_red(dev, false);	
 
 	ret = mt7915_mcu_set_mwds(dev, 1);
 	if (ret)

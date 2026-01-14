@@ -350,7 +350,7 @@ struct mt7915_phy {
 
 	u32 rxfilter;
 	u64 omac_mask;
-
+	u8 band_idx;
 	u16 noise;
 
 	s16 coverage_class;
@@ -517,6 +517,10 @@ struct mt7915_dev {
 #endif
 	struct delayed_work vow_work;
 	struct mt7915_vow_cfg vow_cfg;
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD
+	struct tasklet_struct npu_rx_tasklet_2g;
+	struct tasklet_struct npu_rx_tasklet_5g;
+#endif	
 };
 
 enum {
@@ -554,7 +558,8 @@ mt7915_is_atf_default_on(struct wiphy *wiphy, struct mt7915_dev *dev)
 {
 	return ((!wiphy_ext_feature_isset(wiphy,
                 NL80211_EXT_FEATURE_AIRTIME_FAIRNESS)) ||
-                mtk_wed_device_active(&dev->mt76.mmio.wed));
+                woe_enable());
+              //  mtk_wed_device_active(&dev->mt76.mmio.wed));
 }
 
 
@@ -614,17 +619,25 @@ static inline void mt7986_wmac_disable(struct mt7915_dev *dev)
 {
 }
 #endif
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD
+struct mt7915_dev *mt7915_mmio_probe(struct device *pdev,
+				     void __iomem *mem_base, u32 device_id,struct pci_dev *pci_dev);
+#else
 struct mt7915_dev *mt7915_mmio_probe(struct device *pdev,
 				     void __iomem *mem_base, u32 device_id);
+#endif	
+
 void mt7915_wfsys_reset(struct mt7915_dev *dev);
 irqreturn_t mt7915_irq_handler(int irq, void *dev_instance);
 u64 __mt7915_get_tsf(struct ieee80211_hw *hw, struct mt7915_vif *mvif);
-u32 mt7915_wed_init_buf(void *ptr, dma_addr_t phys, int token_id);
-void mt7915_wed_trigger_ser(struct mtk_wed_device *wed);
+
+//u32 mt7915_wed_init_buf(void *ptr, dma_addr_t phys, int token_id);
+//void mt7915_wed_trigger_ser(struct mtk_wed_device *wed);
 
 int mt7915_register_device(struct mt7915_dev *dev);
 void mt7915_unregister_device(struct mt7915_dev *dev);
 void mt7915_eeprom_rebonding(struct mt7915_dev *dev);
+
 int mt7915_eeprom_init(struct mt7915_dev *dev);
 void mt7915_eeprom_parse_hw_cap(struct mt7915_dev *dev,
 				struct mt7915_phy *phy);

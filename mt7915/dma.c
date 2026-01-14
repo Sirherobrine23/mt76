@@ -5,12 +5,15 @@
 #include "../dma.h"
 #include "mac.h"
 #include <linux/rtnetlink.h>
+#ifdef CONFIG_SOC_WOE 
+#include "../mt76_woe.h"
+#endif
 
 static int
 mt7915_init_tx_queues(struct mt7915_phy *phy, int idx, int n_desc, int ring_base)
 {
 	struct mt7915_dev *dev = phy->dev;
-
+#if 0
 	if (mtk_wed_device_active(&phy->dev->mt76.mmio.wed)) {
 		if (is_mt7986(&dev->mt76))
 			ring_base += MT_TXQ_ID(0) * MT_RING_SIZE;
@@ -19,7 +22,7 @@ mt7915_init_tx_queues(struct mt7915_phy *phy, int idx, int n_desc, int ring_base
 
 		idx -= MT_TXQ_ID(0);
 	}
-
+#endif
 	return mt76_connac_init_tx_queues(phy->mt76, idx, n_desc, ring_base,
 					  MT_WED_Q_TX(idx));
 }
@@ -51,39 +54,25 @@ static void mt7915_dma_config(struct mt7915_dev *dev)
 #define TXQ_CONFIG(q, wfdma, int, id)	Q_CONFIG(__TXQ(q), (wfdma), (int), (id))
 
 	if (is_mt7915(&dev->mt76)) {
-		RXQ_CONFIG(MT_RXQ_MAIN, WFDMA0, MT_INT_RX_DONE_BAND0,
-			   MT7915_RXQ_BAND0);
-		RXQ_CONFIG(MT_RXQ_MCU, WFDMA1, MT_INT_RX_DONE_WM,
-			   MT7915_RXQ_MCU_WM);
-		RXQ_CONFIG(MT_RXQ_MCU_WA, WFDMA1, MT_INT_RX_DONE_WA,
-			   MT7915_RXQ_MCU_WA);
-		RXQ_CONFIG(MT_RXQ_BAND1, WFDMA0, MT_INT_RX_DONE_BAND1,
-			   MT7915_RXQ_BAND1);
-		RXQ_CONFIG(MT_RXQ_BAND1_WA, WFDMA1, MT_INT_RX_DONE_WA_EXT,
-			   MT7915_RXQ_MCU_WA_EXT);
-		RXQ_CONFIG(MT_RXQ_MAIN_WA, WFDMA1, MT_INT_RX_DONE_WA_MAIN,
-			   MT7915_RXQ_MCU_WA);
+		RXQ_CONFIG(MT_RXQ_MAIN, WFDMA0, MT_INT_RX_DONE_BAND0, MT7915_RXQ_BAND0);
+		RXQ_CONFIG(MT_RXQ_MCU, WFDMA1, MT_INT_RX_DONE_WM, MT7915_RXQ_MCU_WM);
+		RXQ_CONFIG(MT_RXQ_MCU_WA, WFDMA1, MT_INT_RX_DONE_WA, MT7915_RXQ_MCU_WA);
+		RXQ_CONFIG(MT_RXQ_BAND1, WFDMA0, MT_INT_RX_DONE_BAND1, MT7915_RXQ_BAND1);
+		RXQ_CONFIG(MT_RXQ_BAND1_WA, WFDMA1, MT_INT_RX_DONE_WA_EXT, MT7915_RXQ_MCU_WA_EXT);
+		RXQ_CONFIG(MT_RXQ_MAIN_WA, WFDMA1, MT_INT_RX_DONE_WA_MAIN, MT7915_RXQ_MCU_WA);
 		TXQ_CONFIG(0, WFDMA1, MT_INT_TX_DONE_BAND0, MT7915_TXQ_BAND0);
 		TXQ_CONFIG(1, WFDMA1, MT_INT_TX_DONE_BAND1, MT7915_TXQ_BAND1);
-		MCUQ_CONFIG(MT_MCUQ_WM, WFDMA1, MT_INT_TX_DONE_MCU_WM,
-			    MT7915_TXQ_MCU_WM);
-		MCUQ_CONFIG(MT_MCUQ_WA, WFDMA1, MT_INT_TX_DONE_MCU_WA,
-			    MT7915_TXQ_MCU_WA);
-		MCUQ_CONFIG(MT_MCUQ_FWDL, WFDMA1, MT_INT_TX_DONE_FWDL,
-			    MT7915_TXQ_FWDL);
+		MCUQ_CONFIG(MT_MCUQ_WM, WFDMA1, MT_INT_TX_DONE_MCU_WM, MT7915_TXQ_MCU_WM);
+		MCUQ_CONFIG(MT_MCUQ_WA, WFDMA1, MT_INT_TX_DONE_MCU_WA, MT7915_TXQ_MCU_WA);
+		MCUQ_CONFIG(MT_MCUQ_FWDL, WFDMA1, MT_INT_TX_DONE_FWDL, MT7915_TXQ_FWDL);
 	} else {
-		RXQ_CONFIG(MT_RXQ_MCU, WFDMA0, MT_INT_RX_DONE_WM,
-			   MT7916_RXQ_MCU_WM);
-		RXQ_CONFIG(MT_RXQ_BAND1_WA, WFDMA0, MT_INT_RX_DONE_WA_EXT_MT7916,
-			   MT7916_RXQ_MCU_WA_EXT);
-		MCUQ_CONFIG(MT_MCUQ_WM, WFDMA0, MT_INT_TX_DONE_MCU_WM,
-			    MT7915_TXQ_MCU_WM);
-		MCUQ_CONFIG(MT_MCUQ_WA, WFDMA0, MT_INT_TX_DONE_MCU_WA_MT7916,
-			    MT7915_TXQ_MCU_WA);
-		MCUQ_CONFIG(MT_MCUQ_FWDL, WFDMA0, MT_INT_TX_DONE_FWDL,
-			    MT7915_TXQ_FWDL);
-
-		if (is_mt7916(&dev->mt76) && mtk_wed_device_active(&dev->mt76.mmio.wed)) {
+		RXQ_CONFIG(MT_RXQ_MCU, WFDMA0, MT_INT_RX_DONE_WM, MT7916_RXQ_MCU_WM);
+		RXQ_CONFIG(MT_RXQ_BAND1_WA, WFDMA0, MT_INT_RX_DONE_WA_EXT_MT7916, MT7916_RXQ_MCU_WA_EXT);
+		MCUQ_CONFIG(MT_MCUQ_WM, WFDMA0, MT_INT_TX_DONE_MCU_WM, MT7915_TXQ_MCU_WM);
+		MCUQ_CONFIG(MT_MCUQ_WA, WFDMA0, MT_INT_TX_DONE_MCU_WA_MT7916, MT7915_TXQ_MCU_WA);
+		MCUQ_CONFIG(MT_MCUQ_FWDL, WFDMA0, MT_INT_TX_DONE_FWDL, MT7915_TXQ_FWDL);
+#ifdef CONFIG_SOC_WOE
+		if (is_mt7916(&dev->mt76) && woe_enable()) {
 			RXQ_CONFIG(MT_RXQ_MAIN, WFDMA0, MT_INT_WED_RX_DONE_BAND0_MT7916,
 				   MT7916_RXQ_BAND0);
 			RXQ_CONFIG(MT_RXQ_MCU_WA, WFDMA0, MT_INT_WED_RX_DONE_WA_MT7916,
@@ -93,26 +82,21 @@ static void mt7915_dma_config(struct mt7915_dev *dev)
 					   MT7916_RXQ_BAND1);
 			else
 				RXQ_CONFIG(MT_RXQ_BAND1, WFDMA0, MT_INT_WED_RX_DONE_BAND1_MT7916,
-					   MT7916_RXQ_BAND1);
+					   MT7916_RXQ_BAND1);		
 			RXQ_CONFIG(MT_RXQ_MAIN_WA, WFDMA0, MT_INT_WED_RX_DONE_WA_MAIN_MT7916,
 				   MT7916_RXQ_MCU_WA_MAIN);
-			TXQ_CONFIG(0, WFDMA0, MT_INT_WED_TX_DONE_BAND0,
-				   MT7915_TXQ_BAND0);
-			TXQ_CONFIG(1, WFDMA0, MT_INT_WED_TX_DONE_BAND1,
-				   MT7915_TXQ_BAND1);
-		} else {
-			RXQ_CONFIG(MT_RXQ_MAIN, WFDMA0, MT_INT_RX_DONE_BAND0_MT7916,
-				   MT7916_RXQ_BAND0);
-			RXQ_CONFIG(MT_RXQ_MCU_WA, WFDMA0, MT_INT_RX_DONE_WA,
-				   MT7916_RXQ_MCU_WA);
-			RXQ_CONFIG(MT_RXQ_BAND1, WFDMA0, MT_INT_RX_DONE_BAND1_MT7916,
-				   MT7916_RXQ_BAND1);
+			TXQ_CONFIG(0, WFDMA0, MT_INT_WED_TX_DONE_BAND0, MT7915_TXQ_BAND0);
+			TXQ_CONFIG(1, WFDMA0, MT_INT_WED_TX_DONE_BAND1, MT7915_TXQ_BAND1);
+		} else 
+#endif
+			{
+			RXQ_CONFIG(MT_RXQ_MAIN, WFDMA0, MT_INT_RX_DONE_BAND0_MT7916, MT7916_RXQ_BAND0);
+			RXQ_CONFIG(MT_RXQ_MCU_WA, WFDMA0, MT_INT_RX_DONE_WA, MT7916_RXQ_MCU_WA);
+			RXQ_CONFIG(MT_RXQ_BAND1, WFDMA0, MT_INT_RX_DONE_BAND1_MT7916, MT7916_RXQ_BAND1);
 			RXQ_CONFIG(MT_RXQ_MAIN_WA, WFDMA0, MT_INT_RX_DONE_WA_MAIN_MT7916,
 				   MT7916_RXQ_MCU_WA_MAIN);
-			TXQ_CONFIG(0, WFDMA0, MT_INT_TX_DONE_BAND0,
-				   MT7915_TXQ_BAND0);
-			TXQ_CONFIG(1, WFDMA0, MT_INT_TX_DONE_BAND1,
-				   MT7915_TXQ_BAND1);
+			TXQ_CONFIG(0, WFDMA0, MT_INT_TX_DONE_BAND0, MT7915_TXQ_BAND0);
+			TXQ_CONFIG(1, WFDMA0, MT_INT_TX_DONE_BAND1, MT7915_TXQ_BAND1);
 		}
 	}
 }
@@ -357,13 +341,12 @@ static int mt7915_dma_enable(struct mt7915_dev *dev)
 	irq_mask = MT_INT_RX_DONE_MCU |
 		   MT_INT_TX_DONE_MCU |
 		   MT_INT_MCU_CMD;
-
 	if (!dev->phy.mt76->band_idx)
 		irq_mask |= MT_INT_BAND0_RX_DONE;
 
 	if (dev->dbdc_support || dev->phy.mt76->band_idx)
 		irq_mask |= MT_INT_BAND1_RX_DONE;
-
+#if 0
 	if (mtk_wed_device_active(&dev->mt76.mmio.wed)) {
 		u32 wed_irq_mask = irq_mask;
 		int ret;
@@ -380,11 +363,44 @@ static int mt7915_dma_enable(struct mt7915_dev *dev)
 
 		mtk_wed_device_start(&dev->mt76.mmio.wed, wed_irq_mask);
 	}
-
+#endif
+#ifdef CONFIG_SOC_WOE
+	if(woe_enable())
+	{
+		u32 wed_irq_mask = irq_mask;
+		wed_irq_mask |= MT_INT_TX_DONE_BAND0 | MT_INT_TX_DONE_BAND1;
+		mt76_wr(dev, MT_INT_WED_MASK_CSR, wed_irq_mask);
+		if(mdev->slot_id == 0)
+		{
+			pAd.wed_int_msk = wed_irq_mask;
+			mt_wlan_hook_call(WLAN_HOOK_HIF_INIT, &pAd, NULL);
+		}
+		else
+		{
+			pAd_1.wed_int_msk = wed_irq_mask;
+			mt_wlan_hook_call(WLAN_HOOK_HIF_INIT, &pAd_1, NULL);		
+		}
+	}
+#endif	
 	mt7915_irq_enable(dev, irq_mask);
 
 	return 0;
 }
+#define MT_WFDMA0_GLO_CFG_DUMMY_REG	BIT(10)
+
+#define MT_WFDMA0_CFG_EXT		MT_WFDMA0(0x2b4)
+#define MT_WFDMA0_EXT_TX_FCTRL_MODE	BIT(28)
+
+#define MT_WFDMA0_CTXD_CFG		MT_WFDMA0(0x2bc)
+#define MT_WFDMA0_BAND0_CTXD_EN		BIT(0)
+#define MT_WFDMA0_BAND0_CTXD_RING_IDX	GENMASK(5, 1)
+#define MT_WFDMA0_BAND1_CTXD_EN		BIT(6)
+#define MT_WFDMA0_BAND1_CTXD_RING_IDX	GENMASK(11, 7)
+#define MT_WFDMA0_CTXD_CASCADE_NUM	GENMASK(15, 12)
+#define MT_WFDMA0_CTXD_TIMEOUT		GENMASK(23, 16)
+
+#define MT_WFDMA_WED_DLY_INT_TICK	MT_WFDMA_EXT_CSR_PHYS(0x38)
+#define MT_CBTOP_RESV			0x70010210
 
 int mt7915_dma_init(struct mt7915_dev *dev, struct mt7915_phy *phy2)
 {
@@ -401,7 +417,7 @@ int mt7915_dma_init(struct mt7915_dev *dev, struct mt7915_phy *phy2)
 		hif1_ofs = MT_WFDMA0_PCIE1(0) - MT_WFDMA0(0);
 
 	mt7915_dma_disable(dev, true);
-
+#if 0
 	if (mtk_wed_device_active(&mdev->mmio.wed)) {
 		if (!is_mt7986(mdev)) {
 			u8 wed_control_rx1 = is_mt7915(mdev) ? 1 : 2;
@@ -420,6 +436,42 @@ int mt7915_dma_init(struct mt7915_dev *dev, struct mt7915_phy *phy2)
 	} else {
 		mt76_clear(dev, MT_WFDMA_HOST_CONFIG, MT_WFDMA_HOST_CONFIG_WED);
 	}
+#endif
+#ifdef CONFIG_SOC_WOE
+	if(woe_enable())
+	{
+		u8 wed_control_rx1 = is_mt7915(mdev) ? 1 : 2;
+		mt76_set(dev, MT_WFDMA_HOST_CONFIG, MT_WFDMA_HOST_CONFIG_WED);
+		mt76_wr(dev, MT_WFDMA_WED_RING_CONTROL,
+			FIELD_PREP(MT_WFDMA_WED_RING_CONTROL_TX0, 18) |
+			FIELD_PREP(MT_WFDMA_WED_RING_CONTROL_TX1, 19) |
+			FIELD_PREP(MT_WFDMA_WED_RING_CONTROL_RX1, wed_control_rx1));
+		if(is_mt7915(mdev))
+			mt76_rmw(dev, MT_WFDMA0_EXT0_CFG, MT_WFDMA0_EXT0_RXWB_KEEP,
+				   MT_WFDMA0_EXT0_RXWB_KEEP);
+			else {
+				if (mt76_rr(dev, MT_CBTOP_RESV) & 0xff == 2) {
+					mt76_set(dev, MT_WFDMA0_GLO_CFG, MT_WFDMA0_GLO_CFG_DUMMY_REG);
+					mt76_set(dev, MT_WFDMA0_CTXD_CFG, FIELD_PREP(MT_WFDMA0_CTXD_TIMEOUT, 0xa));
+				} else {
+					mt76_set(dev, MT_WFDMA0_CTXD_CFG, FIELD_PREP(MT_WFDMA0_CTXD_TIMEOUT, 0xff));
+					mt76_wr(dev, MT_WFDMA_WED_DLY_INT_TICK, 0xffff);
+				}
+
+				mt76_clear(dev, MT_WFDMA0_CTXD_CFG, MT_WFDMA0_CTXD_CASCADE_NUM);
+
+				mt76_set(dev, MT_WFDMA0_CTXD_CFG,
+					FIELD_PREP(MT_WFDMA0_BAND0_CTXD_RING_IDX, 18) |
+					FIELD_PREP(MT_WFDMA0_BAND1_CTXD_RING_IDX, 19) |
+					MT_WFDMA0_BAND0_CTXD_EN | MT_WFDMA0_BAND1_CTXD_EN);
+
+				mt76_set(dev, MT_WFDMA0_CFG_EXT, MT_WFDMA0_EXT_TX_FCTRL_MODE);
+			}		
+	}
+	else
+#endif
+		mt76_clear(dev, MT_WFDMA_HOST_CONFIG, MT_WFDMA_HOST_CONFIG_WED);
+
 
 	/* init tx queue */
 	ret = mt7915_init_tx_queues(&dev->phy,
@@ -470,7 +522,7 @@ int mt7915_dma_init(struct mt7915_dev *dev, struct mt7915_phy *phy2)
 			       MT_RXQ_RING_BASE(MT_RXQ_MCU));
 	if (ret)
 		return ret;
-
+#if 0
 	/* event from WA */
 	if (mtk_wed_device_active(&mdev->mmio.wed) && is_mt7915(mdev)) {
 		wa_rx_base = MT_WED_RX_RING_BASE;
@@ -480,6 +532,23 @@ int mt7915_dma_init(struct mt7915_dev *dev, struct mt7915_phy *phy2)
 		wa_rx_base = MT_RXQ_RING_BASE(MT_RXQ_MCU_WA);
 		wa_rx_idx = MT_RXQ_ID(MT_RXQ_MCU_WA);
 	}
+#endif
+#ifdef CONFIG_SOC_WOE 
+	if(is_mt7915(mdev) && woe_enable())
+	{
+		wa_rx_base = MT_RXQ_MCU_WA_RING_BASE;
+		wa_rx_idx = MT7915_RXQ_MCU_WA;
+		dev->mt76.q_rx[MT_RXQ_MCU_WA].flags = MT_WED_Q_TXFREE;
+	}
+	else
+	{
+		wa_rx_base = MT_RXQ_RING_BASE(MT_RXQ_MCU_WA);
+		wa_rx_idx = MT_RXQ_ID(MT_RXQ_MCU_WA);		
+	}
+#else 
+	wa_rx_base = MT_RXQ_RING_BASE(MT_RXQ_MCU_WA);
+	wa_rx_idx = MT_RXQ_ID(MT_RXQ_MCU_WA);
+#endif	
 	ret = mt76_queue_alloc(dev, &dev->mt76.q_rx[MT_RXQ_MCU_WA],
 			       wa_rx_idx, MT7915_RX_MCU_RING_SIZE,
 			       MT_RX_BUF_SIZE, wa_rx_base);
@@ -488,12 +557,13 @@ int mt7915_dma_init(struct mt7915_dev *dev, struct mt7915_phy *phy2)
 
 	/* rx data queue for band0 */
 	if (!dev->phy.mt76->band_idx) {
+#if 0
 		if (mtk_wed_device_active(&mdev->mmio.wed) &&
 		    mtk_wed_get_rx_capa(&mdev->mmio.wed)) {
 			dev->mt76.q_rx[MT_RXQ_MAIN].flags =
 				MT_WED_Q_RX(MT7915_RXQ_BAND0);
 		}
-
+#endif
 		ret = mt76_queue_alloc(dev, &dev->mt76.q_rx[MT_RXQ_MAIN],
 				       MT_RXQ_ID(MT_RXQ_MAIN),
 				       MT7915_RX_RING_SIZE,
@@ -507,7 +577,17 @@ int mt7915_dma_init(struct mt7915_dev *dev, struct mt7915_phy *phy2)
 	if (!is_mt7915(mdev)) {
 		wa_rx_base = MT_RXQ_RING_BASE(MT_RXQ_MAIN_WA);
 		wa_rx_idx = MT_RXQ_ID(MT_RXQ_MAIN_WA);
-
+#ifdef CONFIG_SOC_WOE 	
+		if(woe_enable())
+		{
+			mdev->q_rx[MT_RXQ_MAIN_WA].flags = MT_WED_Q_TXFREE;
+			if (is_mt7916(mdev)) {
+				wa_rx_base =  MT_WED_RX_RING_BASE;
+				wa_rx_idx = MT7915_RXQ_MCU_WA;
+			}	
+		}
+#endif			
+#if 0
 		if (mtk_wed_device_active(&mdev->mmio.wed)) {
 			mdev->q_rx[MT_RXQ_MAIN_WA].flags = MT_WED_Q_TXFREE;
 			if (is_mt7916(mdev)) {
@@ -515,7 +595,7 @@ int mt7915_dma_init(struct mt7915_dev *dev, struct mt7915_phy *phy2)
 				wa_rx_idx = MT7915_RXQ_MCU_WA;
 			}
 		}
-
+#endif
 		ret = mt76_queue_alloc(dev, &dev->mt76.q_rx[MT_RXQ_MAIN_WA],
 				       wa_rx_idx, MT7915_RX_MCU_RING_SIZE,
 				       MT_RX_BUF_SIZE, wa_rx_base);
@@ -524,12 +604,13 @@ int mt7915_dma_init(struct mt7915_dev *dev, struct mt7915_phy *phy2)
 	}
 
 	if (dev->dbdc_support || dev->phy.mt76->band_idx) {
+#if 0
 		if (mtk_wed_device_active(&mdev->mmio.wed) &&
 		    mtk_wed_get_rx_capa(&mdev->mmio.wed)) {
 			dev->mt76.q_rx[MT_RXQ_BAND1].flags =
 				MT_WED_Q_RX(MT7915_RXQ_BAND1);
 		}
-
+#endif
 		/* rx data queue for band1 */
 		ret = mt76_queue_alloc(dev, &dev->mt76.q_rx[MT_RXQ_BAND1],
 				       MT_RXQ_ID(MT_RXQ_BAND1),
@@ -565,7 +646,9 @@ int mt7915_dma_init(struct mt7915_dev *dev, struct mt7915_phy *phy2)
 int mt7915_dma_reset(struct mt7915_dev *dev, bool force)
 {
 	struct mt76_phy *mphy_ext = dev->mt76.phys[MT_BAND1];
+#if 0
 	struct mtk_wed_device *wed = &dev->mt76.mmio.wed;
+#endif
 	int i;
 
 	/* clean up hw queues */
@@ -584,13 +667,14 @@ int mt7915_dma_reset(struct mt7915_dev *dev, bool force)
 	/* reset wfsys */
 	if (force)
 		mt7915_wfsys_reset(dev);
-
+#if 0
+	/* disable wfdma */
 	if (mtk_wed_device_active(&dev->mt76.mmio.wed))
 		mtk_wed_device_dma_reset(&dev->mt76.mmio.wed);
+#endif
 	mt7915_dma_disable(dev, force);
-
+#if 0
 	/* set wifi reset done, wait FE reset */
-#ifdef MT76_MTK_WOE
 	if (mtk_wed_device_active(wed) && atomic_read(&wed->fe_reset)) {
 		atomic_set(&wed->fe_reset, 0);
 		rtnl_lock();
@@ -604,14 +688,19 @@ int mt7915_dma_reset(struct mt7915_dev *dev, bool force)
 		mt76_queue_reset(dev, dev->mphy.q_tx[i]);
 		if (mphy_ext) {
 			mt76_queue_reset(dev, mphy_ext->q_tx[i]);
+#if 0
 			if (mtk_wed_device_active(wed))
 				mt76_dma_wed_setup(&dev->mt76,
 						   mphy_ext->q_tx[i],
 						   true);
+
+#endif
 		}
+#if 0
 		if (mtk_wed_device_active(wed))
 			mt76_dma_wed_setup(&dev->mt76, dev->mphy.q_tx[i],
 					   true);
+#endif
 	}
 
 	for (i = 0; i < __MT_MCUQ_MAX; i++)
@@ -626,11 +715,11 @@ int mt7915_dma_reset(struct mt7915_dev *dev, bool force)
 
 	mt76_for_each_q_rx(&dev->mt76, i)
 		mt76_queue_rx_reset(dev, i);
-
+#if 0
 	if(mtk_wed_device_active(wed) && is_mt7915(&dev->mt76))
 		mt76_rmw(dev, MT_WFDMA0_EXT0_CFG, MT_WFDMA0_EXT0_RXWB_KEEP,
 			 MT_WFDMA0_EXT0_RXWB_KEEP);
-
+#endif
 	mt7915_dma_enable(dev);
 
 	return 0;

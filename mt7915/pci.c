@@ -11,6 +11,9 @@
 #include "mt7915.h"
 #include "mac.h"
 #include "../trace.h"
+#ifdef CONFIG_SOC_WOE 
+#include "../mt76_woe.h"
+#endif
 
 static LIST_HEAD(hif_list);
 static DEFINE_SPINLOCK(hif_lock);
@@ -98,7 +101,95 @@ static int mt7915_pci_hif2_probe(struct pci_dev *pdev)
 
 	return 0;
 }
+#ifdef CONFIG_SOC_WOE 
+#define O_RDONLY			0x0F01
+/*if have /etc/woe_disable disable woe else enable woe(default enable)*/
+int woe_enable_chk(void)
+{
+	struct file *filp_r = NULL;
+	char tempStr[64] = {0};
+	char filename[64] = "/etc/woe_disable";
+	int ret = 0 , error = 0;
+	mm_segment_t orgfs;
+	struct kstat stat;
+	orgfs = get_fs();
+	set_fs(KERNEL_DS);
 
+	error = vfs_stat(filename, &stat);
+	if(error)
+		printk("%s:%d error!!!\n",__func__,__LINE__);
+	
+	filp_r = filp_open(filename, O_RDONLY, 0);
+	if (IS_ERR(filp_r))
+	{
+		printk("-->2) Error %ld opening %s\n", -PTR_ERR(filp_r), filename);
+		ret = 1;
+		goto out1;
+	}
+	memset(tempStr, 0x00, sizeof(tempStr));
+	ecnt_kernel_fs_read(filp_r, tempStr, sizeof(tempStr), &filp_r->f_pos);
+	
+	if(strstr(tempStr,"1"))
+		printk("%s:%d enable woe !!!\n",__func__,__LINE__);
+	else
+	{
+		printk("%s:%d disable woe !!!\n",__func__,__LINE__);
+		//ret = 0; /*because always read NULL, so if access file enable woe*/
+	}
+out:
+	filp_close(filp_r, NULL);
+	set_fs(orgfs);
+	return ret;
+out1:
+	set_fs(orgfs);
+	return ret;	
+}
+#endif
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD 
+#define O_RDONLY			0x0F01
+/*if have /etc/woe_disable disable woe else enable woe(default enable)*/
+int npu_enable_chk(void)
+{
+	struct file *filp_r = NULL;
+	char tempStr[64] = {0};
+	char filename[64] = "/etc/npu_enable";
+	int ret = 0 , error = 0;
+	mm_segment_t orgfs;
+	struct kstat stat;
+	orgfs = get_fs();
+	set_fs(KERNEL_DS);
+
+	error = vfs_stat(filename, &stat);
+	if(error)
+		printk("%s:%d error!!!\n",__func__,__LINE__);
+	
+	filp_r = filp_open(filename, O_RDONLY, 0);
+	if (IS_ERR(filp_r))
+	{
+		printk("npu npu_controller setting \n default open npu  %ld opening %s\n", -PTR_ERR(filp_r), filename);
+		ret = 1;
+		goto out1;
+	}
+	memset(tempStr, 0x00, sizeof(tempStr));
+	ecnt_kernel_fs_read(filp_r, tempStr, sizeof(tempStr), &filp_r->f_pos);
+	
+	if(strstr(tempStr,"1")){
+		printk("%s:%d enable npu !!!\n",__func__,__LINE__);
+	    ret =1 ;
+	}
+	else{
+		printk("%s:%d disable npu !!!\n",__func__,__LINE__);
+		//ret = 0; /*because always read NULL, so if access file enable woe*/
+	}
+out:
+	filp_close(filp_r, NULL);
+	set_fs(orgfs);
+	return ret;
+out1:
+	set_fs(orgfs);
+	return ret;	
+}
+#endif
 static int mt7915_pci_probe(struct pci_dev *pdev,
 			    const struct pci_device_id *id)
 {
@@ -107,6 +198,12 @@ static int mt7915_pci_probe(struct pci_dev *pdev,
 	struct mt76_dev *mdev;
 	int irq;
 	int ret;
+#ifdef CONFIG_SOC_WOE 
+	set_woe_enable(woe_enable_chk());
+#endif
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD
+	set_npu_enable(npu_enable_chk());
+#endif
 
 	ret = pcim_enable_device(pdev);
 	if (ret)
@@ -127,8 +224,14 @@ static int mt7915_pci_probe(struct pci_dev *pdev,
 	if (id->device == 0x7916 || id->device == 0x790a)
 		return mt7915_pci_hif2_probe(pdev);
 
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD
+	dev = mt7915_mmio_probe(&pdev->dev, pcim_iomap_table(pdev)[0],
+				id->device,pdev);
+#else 
 	dev = mt7915_mmio_probe(&pdev->dev, pcim_iomap_table(pdev)[0],
 				id->device);
+#endif	
+
 	if (IS_ERR(dev))
 		return PTR_ERR(dev);
 
@@ -139,6 +242,13 @@ static int mt7915_pci_probe(struct pci_dev *pdev,
 	ret = mt7915_mmio_wed_init(dev, pdev, true, &irq);
 	if (ret < 0)
 		goto free_wed_or_irq_vector;
+#ifdef CONFIG_SOC_WOE 
+	/************************************/
+	if(woe_enable())
+		woe_start(pdev, mdev, pcim_iomap_table(pdev)[0], pci_resource_start(pdev, 0) + MT_WFDMA_EXT_CSR_BASE);
+	/************************************/
+#endif
+	irq = pdev->irq;
 
 	if (!ret) {
 		hif2 = mt7915_pci_init_hif2(pdev);
@@ -178,6 +288,16 @@ static int mt7915_pci_probe(struct pci_dev *pdev,
 	ret = mt7915_register_device(dev);
 	if (ret)
 		goto free_hif2_irq;
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD
+	if(npu_enable()){			
+		wifi_offload_init_npu(pdev,dev,0);
+		npu_init_rxD(dev,pdev);
+		get_npu_rxd(dev,pdev);
+	}
+#endif
+	/*modify MT7915A 2G txop config to improve Tx TP*/
+	if(is_mt7915(&dev->mt76) && !dev->dbdc_support && dev->phy.band_idx == 0)
+		mt76_wr(dev, MT_TMAC_TCR2(0), 0Xbb0000);
 
 	return 0;
 
@@ -189,9 +309,11 @@ free_hif2:
 		put_device(dev->hif2->dev);
 	devm_free_irq(mdev->dev, irq, dev);
 free_wed_or_irq_vector:
+#if 0
 	if (mtk_wed_device_active(&mdev->mmio.wed))
 		mtk_wed_device_detach(&mdev->mmio.wed);
 	else
+#endif
 		pci_free_irq_vectors(pdev);
 free_device:
 	mt76_free_device(&dev->mt76);

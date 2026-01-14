@@ -7,6 +7,9 @@
 #include <linux/module.h>
 #include "mt7915.h"
 #include "mcu.h"
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD	
+#include "modules/npu/wifi_mail.h"
+#endif
 
 static bool mt7915_dev_running(struct mt7915_dev *dev)
 {
@@ -705,12 +708,13 @@ int mt7915_mac_sta_add(struct mt76_dev *mdev, struct ieee80211_vif *vif,
 	int ret, idx;
 	u32 addr;
 	u8 flags = MT76_WED_DEFAULT;
-
-	if (mtk_wed_device_active(&dev->mt76.mmio.wed) &&
+#if CONFIG_SOC_WOE
+	if (woe_enable() &&
 	    !is_mt7915(&dev->mt76)) {
 		flags = test_bit(MT_WCID_FLAG_4ADDR, &msta->wcid.flags) ?
 			MT76_WED_WDS_ACTIVE : MT76_WED_ACTIVE;
 	}
+#endif
 
 	idx = __mt76_wcid_alloc(mdev->wcid_mask, MT7915_WTBL_STA, flags);
 	if (idx < 0)
@@ -838,7 +842,18 @@ mt7915_ampdu_action(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 	struct mt7915_sta *msta = (struct mt7915_sta *)sta->drv_priv;
 	u16 tid = params->tid;
 	u16 ssn = params->ssn;
+	u8 band;
 	struct mt76_txq *mtxq;
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD		
+	struct mt76_phy *mphy = &dev->mt76.phy;	
+	u16 buf_size =params->buf_size;
+	u16 index = msta->wcid.idx;
+	if(dev->dbdc_support)		
+		band = msta->vif->mt76.band_idx;	
+	else		
+		band = mphy->chandef.chan->band;
+
+#endif	
 	int ret = 0;
 
 	if (!txq)
@@ -852,10 +867,18 @@ mt7915_ampdu_action(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 		mt76_rx_aggr_start(&dev->mt76, &msta->wcid, tid, ssn,
 				   params->buf_size);
 		ret = mt7915_mcu_add_rx_ba(dev, params, true);
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD
+        if(npu_enable())
+			WIFI_MAIL_API_SET_WAIT_BA_WIN_SIZE(band,index,tid,buf_size,ssn);
+#endif			
 		break;
 	case IEEE80211_AMPDU_RX_STOP:
 		mt76_rx_aggr_stop(&dev->mt76, &msta->wcid, tid);
 		ret = mt7915_mcu_add_rx_ba(dev, params, false);
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD	
+        if(npu_enable())
+			WIFI_MAIL_API_SET_WAIT_BA_WIN_SIZE(band,index, tid,0,0);
+#endif			
 		break;
 	case IEEE80211_AMPDU_TX_OPERATIONAL:
 		mtxq->aggr = true;
@@ -1103,7 +1126,9 @@ static void mt7915_sta_statistics(struct ieee80211_hw *hw,
 	/* offloading flows bypass networking stack, so driver counts and
 	 * reports sta statistics via NL80211_STA_INFO when WED is active.
 	 */
-	if (mtk_wed_device_active(&phy->dev->mt76.mmio.wed)) {
+#if CONFIG_SOC_WOE
+	//if (mtk_wed_device_active(&phy->dev->mt76.mmio.wed)) {
+	if (woe_enable()) {
 		sinfo->tx_bytes = msta->wcid.stats.tx_bytes;
 		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_TX_BYTES64);
 
@@ -1115,7 +1140,7 @@ static void mt7915_sta_statistics(struct ieee80211_hw *hw,
 
 		sinfo->tx_retries = msta->wcid.stats.tx_retries;
 		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_TX_RETRIES);
-
+		#if 0
 		if (mtk_wed_get_rx_capa(&phy->dev->mt76.mmio.wed)) {
 			sinfo->rx_bytes = msta->wcid.stats.rx_bytes;
 			sinfo->filled |= BIT_ULL(NL80211_STA_INFO_RX_BYTES64);
@@ -1123,8 +1148,9 @@ static void mt7915_sta_statistics(struct ieee80211_hw *hw,
 			sinfo->rx_packets = msta->wcid.stats.rx_packets;
 			sinfo->filled |= BIT_ULL(NL80211_STA_INFO_RX_PACKETS);
 		}
+		#endif
 	}
-
+#endif
 	sinfo->ack_signal = (s8)msta->ack_signal;
 	sinfo->filled |= BIT_ULL(NL80211_STA_INFO_ACK_SIGNAL);
 
@@ -1195,7 +1221,8 @@ static void mt7915_sta_set_4addr(struct ieee80211_hw *hw,
 	else
 		clear_bit(MT_WCID_FLAG_4ADDR, &msta->wcid.flags);
 
-	if (mtk_wed_device_active(&dev->mt76.mmio.wed) &&
+//	if (mtk_wed_device_active(&dev->mt76.mmio.wed) &&
+	if (woe_enable() &&
 	    !is_mt7915(&dev->mt76)) {
 		mt7915_sta_remove(hw, vif, sta);
 		mt76_sta_pre_rcu_remove(hw, vif, sta);
@@ -1562,10 +1589,10 @@ mt7915_net_fill_forward_path(struct ieee80211_hw *hw,
 	struct mt7915_dev *dev = mt7915_hw_dev(hw);
 	struct mt7915_phy *phy = mt7915_hw_phy(hw);
 	struct mtk_wed_device *wed = &dev->mt76.mmio.wed;
-
+#if 0
 	if (!mtk_wed_device_active(wed))
 		return -ENODEV;
-
+#endif
 	if (msta->wcid.idx > MT7915_WTBL_STA)
 		return -EIO;
 
@@ -1592,10 +1619,10 @@ mt7915_net_fill_receive_path(struct ieee80211_hw *hw,
 {
 	struct mt7915_dev *dev = mt7915_hw_dev(hw);
 	struct mtk_wed_device *wed = &dev->mt76.mmio.wed;
-
+#if 0
 	if (!mtk_wed_device_active(wed))
 		return -ENODEV;
-
+#endif
 	path->dev = ctx->dev;
 	path->mtk_wdma.wdma_idx = wed->wdma_idx;
 
