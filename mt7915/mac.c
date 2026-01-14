@@ -1745,6 +1745,8 @@ void mt7915_mac_reset_work(struct work_struct *work)
 	/* chip partial reset */
 	if (!(READ_ONCE(dev->recovery.state) & MT_MCU_CMD_STOP_DMA))
 		return;
+
+	dev->mt76.recovery_state = MT76_RECOVERY_PROCESS;
 	dev_info(dev->mt76.dev,"%s L1 SER recovery start.\n",
 		wiphy_name(dev->mt76.hw->wiphy));	
 #if 0
@@ -1836,6 +1838,8 @@ void mt7915_mac_reset_work(struct work_struct *work)
 		printk("%s:%d config txd !!!!\n",__func__,__LINE__);
 		txd_config(dev);
 	}					 
+
+	dev->mt76.recovery_state = MT76_RECOVERY_DONE;
 	dev_info(dev->mt76.dev,"%s L1 SER recovery completed.\n",
 		wiphy_name(dev->mt76.hw->wiphy));	
 }
@@ -1932,6 +1936,15 @@ void mt7915_reset(struct mt7915_dev *dev)
 		mt7915_irq_disable(dev, MT_INT_MCU_CMD);
 		queue_work(dev->mt76.wq, &dev->dump_work);
 		return;
+	}
+
+	if ((READ_ONCE(dev->recovery.state) & MT_MCU_CMD_STOP_DMA)) {
+		if (dev->mt76.recovery_state != MT76_RECOVERY_DONE)
+			dev->mt76.recovery_state = MT76_RECOVERY_OVERLAP_TRIGGERED;
+		else
+			dev->mt76.recovery_state = MT76_RECOVERY_TRIGGERED;
+
+		wake_up(&dev->mt76.mcu.wait);
 	}
 
 	queue_work(dev->mt76.wq, &dev->reset_work);

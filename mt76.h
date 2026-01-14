@@ -449,6 +449,14 @@ enum {
 	MT76_STATE_PM,
 };
 
+enum {
+	MT76_RECOVERY_INIT,
+	MT76_RECOVERY_TRIGGERED,
+	MT76_RECOVERY_OVERLAP_TRIGGERED,
+	MT76_RECOVERY_PROCESS,
+	MT76_RECOVERY_DONE = MT76_RECOVERY_INIT,
+};
+
 struct mt76_hw_cap {
 	bool has_2ghz;
 	bool has_5ghz;
@@ -886,6 +894,7 @@ struct mt76_dev {
 	wait_queue_head_t tx_wait;
 	/* spinclock used to protect wcid pktid linked list */
 	spinlock_t status_lock;
+	u16 recovery_state;
 
 	u32 wcid_mask[DIV_ROUND_UP(MT76_N_WCIDS, 32)];
 	u32 wcid_phy_mask[DIV_ROUND_UP(MT76_N_WCIDS, 32)];

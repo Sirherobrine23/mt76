@@ -198,6 +198,13 @@ mt7915_mcu_send_message(struct mt76_dev *mdev, struct sk_buff *skb,
 	enum mt76_mcuq_id qid;
 	int ret;
 
+	if (mdev->recovery_state == MT76_RECOVERY_OVERLAP_TRIGGERED) {
+		dev_info(dev->mt76.dev,"\n%s L1 SER recovery overlap, drop message %08x.",
+			 wiphy_name(dev->mt76.hw->wiphy), cmd);
+		dev_kfree_skb(skb);
+		return -EPERM;
+	}
+
 	ret = mt76_connac2_mcu_fill_message(mdev, skb, cmd, wait_seq);
 
 	if (ret)

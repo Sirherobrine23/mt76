@@ -656,7 +656,8 @@ mt76_dma_tx_queue_skb_raw(struct mt76_dev *dev, struct mt76_queue *q,
 	dma_addr_t addr;
 	int ret = -ENOMEM;
 
-	if (test_bit(MT76_MCU_RESET, &dev->phy.state)) {
+	if (test_bit(MT76_MCU_RESET, &dev->phy.state) ||
+	    dev->recovery_state == MT76_RECOVERY_TRIGGERED) {
 		ret = -EAGAIN;
 		goto error;
 	}
