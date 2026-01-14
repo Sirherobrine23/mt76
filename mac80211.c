@@ -10,7 +10,11 @@
 #endif
 static bool allow_dfs = true;
 module_param(allow_dfs, bool, 0644);
-MODULE_PARM_DESC(restrict_dfs, "Allow support for DFS channels");
+MODULE_PARM_DESC(allow_dfs, "Allow support for DFS channels");
+
+static bool skip_high_2g_chan = false;
+module_param(skip_high_2g_chan, bool, 0644);
+MODULE_PARM_DESC(skip_high_2g_chan, "Skip channels 12, 13 for 2G");
 #define CHAN2G(_idx, _freq) {			\
 	.band = NL80211_BAND_2GHZ,		\
 	.center_freq = (_freq),			\
@@ -367,11 +371,25 @@ static int
 mt76_init_sband_2g(struct mt76_phy *phy, struct ieee80211_rate *rates,
 		   int n_rates)
 {
+	int i = 0, ret = 0;
 	phy->hw->wiphy->bands[NL80211_BAND_2GHZ] = &phy->sband_2g.sband;
 
-	return mt76_init_sband(phy, &phy->sband_2g, mt76_channels_2ghz,
+	ret = mt76_init_sband(phy, &phy->sband_2g, mt76_channels_2ghz,
 			       ARRAY_SIZE(mt76_channels_2ghz), rates,
 			       n_rates, true, false);
+				   
+	if (skip_high_2g_chan) {
+		for (i = 0; i < phy->sband_2g.sband.n_channels; i++) {
+			struct ieee80211_channel *chan = &phy->sband_2g.sband.channels[i];
+			if (chan->center_freq == 2467 || chan->center_freq == 2472) {
+				pr_err("Disabling freq %d MHz for 2G\n",
+					 chan->center_freq);
+				chan->flags |= IEEE80211_CHAN_DISABLED;
+			}
+		}
+	}
+	return ret;
+				   
 }
 
 static int
