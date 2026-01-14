@@ -219,9 +219,13 @@ mt76_tx_check_non_aql(struct mt76_dev *dev, struct mt76_wcid *wcid,
 		      struct sk_buff *skb)
 {
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
+	struct wiphy *wiphy = dev->hw->wiphy;
 	int pending;
 
 	if (!wcid || info->tx_time_est)
+		return;
+	
+	if (wiphy_ext_feature_isset(wiphy, NL80211_EXT_FEATURE_AQL))
 		return;
 
 	pending = atomic_dec_return(&wcid->non_aql_packets);
@@ -295,6 +299,7 @@ __mt76_tx_queue_skb(struct mt76_phy *phy, int qid, struct sk_buff *skb,
 {
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
 	struct mt76_queue *q = phy->q_tx[qid];
+	struct wiphy *wiphy = phy->hw->wiphy;
 	struct mt76_dev *dev = phy->dev;
 	bool non_aql;
 	int pending;
@@ -309,6 +314,9 @@ __mt76_tx_queue_skb(struct mt76_phy *phy, int qid, struct sk_buff *skb,
 	q->entry[idx].wcid = wcid->idx;
 
 	if (!non_aql)
+		return idx;
+
+	if (wiphy_ext_feature_isset(wiphy, NL80211_EXT_FEATURE_AQL))
 		return idx;
 
 	pending = atomic_inc_return(&wcid->non_aql_packets);
