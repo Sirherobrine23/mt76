@@ -1317,6 +1317,10 @@ void mt76_rx_complete(struct mt76_dev *dev, struct sk_buff_head *frames,
 		
 #ifdef TCSUPPORT_NPU_WIFI_OFFLOAD
 	if(npu_enable()){
+		if(ra_sw_nat_hook_set_magic)
+			ra_sw_nat_hook_set_magic(skb, FOE_MAGIC_WLAN);
+		if(ra_sw_nat_hook_rx != NULL)
+			ra_sw_nat_hook_rx(skb);
 		napi_gro_receive(napi, skb);
 	}	
 	else{	

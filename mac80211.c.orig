@@ -1314,6 +1314,12 @@ void mt76_rx_complete(struct mt76_dev *dev, struct sk_buff_head *frames,
 
 	list_for_each_entry_safe(skb, tmp, &list, list) {
 		skb_list_del_init(skb);
+		
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD
+	if(npu_enable()){
+		napi_gro_receive(napi, skb);
+	}	
+	else{	
 #if defined(TCSUPPORT_RA_HWNAT) && defined(TCSUPPORT_HWNAT_V3)
 		if((qid == MT_RXQ_MAIN) || (qid == MT_RXQ_BAND1))
 		{
@@ -1328,8 +1334,32 @@ void mt76_rx_complete(struct mt76_dev *dev, struct sk_buff_head *frames,
 			}
 		}
 		else
-#endif		
-		napi_gro_receive(napi, skb);
+#endif	
+			napi_gro_receive(napi, skb);
+		}	
+
+	
+#else
+
+#if defined(TCSUPPORT_RA_HWNAT) && defined(TCSUPPORT_HWNAT_V3)
+		if((qid == MT_RXQ_MAIN) || (qid == MT_RXQ_BAND1))
+		{
+			if(ra_sw_nat_hook_set_magic)
+				ra_sw_nat_hook_set_magic(skb, FOE_MAGIC_WLAN);
+			if(ra_sw_nat_hook_rx != NULL)
+			{
+				if(ra_sw_nat_hook_rx(skb) != 0)
+				{
+					napi_gro_receive(napi, skb);
+				}
+			}
+		}
+		else		
+#endif	
+			napi_gro_receive(napi, skb);
+#endif
+			
+
 	}
 }
 
