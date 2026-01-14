@@ -8,6 +8,9 @@
 #if defined(TCSUPPORT_RA_HWNAT) && defined(TCSUPPORT_HWNAT_V3) 
 #include <linux/foe_hook.h>
 #endif
+static bool allow_dfs = true;
+module_param(allow_dfs, bool, 0644);
+MODULE_PARM_DESC(restrict_dfs, "Allow support for DFS channels");
 #define CHAN2G(_idx, _freq) {			\
 	.band = NL80211_BAND_2GHZ,		\
 	.center_freq = (_freq),			\
@@ -375,11 +378,24 @@ static int
 mt76_init_sband_5g(struct mt76_phy *phy, struct ieee80211_rate *rates,
 		   int n_rates, bool vht)
 {
+	int i = 0, ret = 0;
 	phy->hw->wiphy->bands[NL80211_BAND_5GHZ] = &phy->sband_5g.sband;
 
-	return mt76_init_sband(phy, &phy->sband_5g, mt76_channels_5ghz,
-			       ARRAY_SIZE(mt76_channels_5ghz), rates,
-			       n_rates, true, vht);
+	ret = mt76_init_sband(phy, &phy->sband_5g, mt76_channels_5ghz,
+					ARRAY_SIZE(mt76_channels_5ghz), rates,
+					n_rates, true, vht);
+
+	if (!allow_dfs) {
+		for (i = 0; i < phy->sband_5g.sband.n_channels; i++) {
+			struct ieee80211_channel *chan = &phy->sband_5g.sband.channels[i];
+			if (chan->center_freq >= 5260 && chan->center_freq <= 5720) {
+				pr_err("Disabling freq %d MHz as it's DFS\n",
+					 chan->center_freq);
+				chan->flags |= IEEE80211_CHAN_DISABLED;
+			}
+		}
+	}
+	return ret;
 }
 
 static int
