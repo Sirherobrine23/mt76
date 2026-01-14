@@ -8,7 +8,9 @@
 #include "dma.h"
 #ifdef TCSUPPORT_NPU_WIFI_OFFLOAD
 #include "mt76_npu_offload.h"
-extern struct sk_buff *(*fromHostadptPktHandle_hook)(unsigned int ringIdx, unsigned char* preschedule);
+extern struct sk_buff *(*fromHostadptPktHandle_hook)(unsigned int ringIdx,
+	unsigned char* preschedule, unsigned int* vnd_spec);
+
 extern void (*hostdapt_enable_int_hook)(unsigned int ringIdx);
 extern void (*hostdapt_disable_int_hook)(unsigned int ringIdx);
 extern void (*hostdapt_registe_wifitask_hook)(unsigned int ringIdx, void *func);
@@ -1227,6 +1229,7 @@ int mt76_dma_rx_poll(struct napi_struct *napi, int budget)
 	struct sk_buff *skb;
 	int npu_done=0;
 	unsigned char band = 0;
+	UINT32 vend_spec = 0;
 #endif
 
 	dev = container_of(napi->dev, struct mt76_dev, napi_dev);
@@ -1255,7 +1258,7 @@ int mt76_dma_rx_poll(struct napi_struct *napi, int budget)
 				while (npu_done < budget)
 				{		
 					if(fromHostadptPktHandle_hook)
-						pkt = fromHostadptPktHandle_hook(band, &bReschedule);	
+						pkt = fromHostadptPktHandle_hook(band, &bReschedule, &vend_spec);	
 					if(pkt)
 					{	npu_done++;
 						skb=(struct sk_buff *)pkt;
@@ -1284,7 +1287,7 @@ int mt76_dma_rx_poll(struct napi_struct *napi, int budget)
 				unsigned char band = dev->slot_id;
 
 				if(fromHostadptPktHandle_hook){
-					pkt = fromHostadptPktHandle_hook(band, &bReschedule);	
+					pkt = fromHostadptPktHandle_hook(band, &bReschedule, &vend_spec);	
 					}
 
 				if(pkt)
