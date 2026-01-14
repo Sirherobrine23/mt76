@@ -866,7 +866,7 @@ int mt7915_tx_prepare_skb(struct mt76_dev *mdev, void *txwi_ptr,
 			      qid, 0);
 #ifdef CONFIG_SOC_WOE 	
 	tx_info_woe.wcid = wcid->idx;
-	if(msta)
+	if(msta && msta->vif)
 		tx_info_woe.ringidx = msta->vif->mt76.band_idx;
 	else
 		tx_info_woe.ringidx = 3;
