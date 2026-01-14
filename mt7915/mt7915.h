@@ -187,6 +187,7 @@ struct mt7915_sta {
 
 	struct list_head poll_list;
 	struct list_head rc_list;
+	struct list_head stats_list;
 	u32 airtime_ac[8];
 
 	int ack_signal;
@@ -366,6 +367,10 @@ struct mt7915_phy {
 	struct mib_stats mib;
 	struct mt76_channel_state state_ts;
 	struct delayed_work ipi_work;
+
+	u8 stats_work_count;
+	struct list_head stats_list;
+	spinlock_t stats_lock;	
 
 #ifdef CONFIG_NL80211_TESTMODE
 	struct {
@@ -726,6 +731,7 @@ int mt7915_mcu_get_chan_mib_info(struct mt7915_phy *phy, bool chan_switch);
 int mt7915_mcu_get_temperature(struct mt7915_phy *phy);
 int mt7915_mcu_set_thermal_throttling(struct mt7915_phy *phy, u8 state);
 int mt7915_mcu_set_thermal_protect(struct mt7915_phy *phy);
+int mt7915_mcu_get_tx_rate(struct mt7915_phy *phy, u16 wcidx);
 int mt7915_mcu_get_rx_rate(struct mt7915_phy *phy, struct ieee80211_vif *vif,
 			   struct ieee80211_sta *sta, struct rate_info *rate);
 int mt7915_mcu_get_tx_stat_wa(struct mt7915_dev *dev, u16 wcid);

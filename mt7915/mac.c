@@ -181,15 +181,7 @@ static void mt7915_mac_sta_poll(struct mt7915_dev *dev)
 						       rx_cur);
 		}
 
-		/*
-		 * We don't support reading GI info from txs packets.
-		 * For accurate tx status reporting and AQL improvement,
-		 * we need to make sure that flags match so polling GI
-		 * from per-sta counters directly.
-		 */
 		rate = &msta->wcid.rate;
-		addr = mt7915_mac_wtbl_lmac_addr(dev, idx, 7);
-		val = mt76_rr(dev, addr);
 
 		switch (rate->bw) {
 		case RATE_INFO_BW_160:
@@ -204,18 +196,6 @@ static void mt7915_mac_sta_poll(struct mt7915_dev *dev)
 		default:
 			bw = IEEE80211_STA_RX_BW_20;
 			break;
-		}
-
-		if (rate->flags & RATE_INFO_FLAGS_HE_MCS) {
-			u8 offs = 24 + 2 * bw;
-
-			rate->he_gi = (val & (0x3 << offs)) >> offs;
-		} else if (rate->flags &
-			   (RATE_INFO_FLAGS_VHT_MCS | RATE_INFO_FLAGS_MCS)) {
-			if (val & BIT(12 + bw))
-				rate->flags |= RATE_INFO_FLAGS_SHORT_GI;
-			else
-				rate->flags &= ~RATE_INFO_FLAGS_SHORT_GI;
 		}
 
 		/* get signal strength of resp frames (CTS/BA/ACK) */
@@ -1084,6 +1064,7 @@ mt7915_mac_tx_free(struct mt7915_dev *dev, void *data, int len)
 		info = le32_to_cpu(*cur_info);
 		if (info & MT_TX_FREE_PAIR) {
 			struct mt7915_sta *msta;
+			struct mt7915_phy *phy;
 			u16 idx;
 
 			idx = FIELD_GET(MT_TX_FREE_WLAN_ID, info);
@@ -1093,10 +1074,15 @@ mt7915_mac_tx_free(struct mt7915_dev *dev, void *data, int len)
 				continue;
 
 			msta = container_of(wcid, struct mt7915_sta, wcid);
+			phy = msta->vif->phy;
 			spin_lock_bh(&dev->sta_poll_lock);
 			if (list_empty(&msta->poll_list))
 				list_add_tail(&msta->poll_list, &dev->sta_poll_list);
 			spin_unlock_bh(&dev->sta_poll_lock);
+			spin_lock_bh(&phy->stats_lock);
+			if (list_empty(&msta->stats_list))
+				list_add_tail(&msta->stats_list, &phy->stats_list);
+			spin_unlock_bh(&phy->stats_lock);			
 			continue;
 		}
 
@@ -1168,6 +1154,7 @@ mt7915_mac_tx_free_v0(struct mt7915_dev *dev, void *data, int len)
 static void mt7915_mac_add_txs(struct mt7915_dev *dev, void *data)
 {
 	struct mt7915_sta *msta = NULL;
+	struct mt7915_phy *phy;
 	struct mt76_wcid *wcid;
 	__le32 *txs_data = data;
 	u16 wcidx;
@@ -1202,6 +1189,12 @@ static void mt7915_mac_add_txs(struct mt7915_dev *dev, void *data)
 	if (list_empty(&msta->poll_list))
 		list_add_tail(&msta->poll_list, &dev->sta_poll_list);
 	spin_unlock_bh(&dev->sta_poll_lock);
+
+	phy = msta->vif->phy;
+	spin_lock_bh(&phy->stats_lock);
+	if (list_empty(&msta->stats_list))
+		list_add_tail(&msta->stats_list, &phy->stats_list);
+	spin_unlock_bh(&phy->stats_lock);	
 
 out:
 	rcu_read_unlock();
@@ -2174,6 +2167,26 @@ void mt7915_capi_sta_rc_work(void *data, struct ieee80211_sta *sta)
 	spin_unlock_bh(&dev->sta_poll_lock);
 }
 #endif
+static void mt7915_mac_sta_stats_work(struct mt7915_phy *phy)
+{
+	struct mt7915_sta *sta;
+	LIST_HEAD(list);
+
+	spin_lock_bh(&phy->stats_lock);
+	list_splice_init(&phy->stats_list, &list);
+
+	while (!list_empty(&list)) {
+		sta = list_first_entry(&list, struct mt7915_sta, stats_list);
+		list_del_init(&sta->stats_list);
+		spin_unlock_bh(&phy->stats_lock);
+
+		mt7915_mcu_get_tx_rate(phy, sta->wcid.idx);
+
+		spin_lock_bh(&phy->stats_lock);
+	}
+
+	spin_unlock_bh(&phy->stats_lock);
+}
 
 void mt7915_mac_sta_rc_work(struct work_struct *work)
 {
@@ -2235,6 +2248,10 @@ void mt7915_mac_work(struct work_struct *work)
 
 		mt7915_mac_update_stats(phy);
 		mt7915_mac_severe_check(phy);
+	}
+	if (++phy->stats_work_count == 10) {
+		phy->stats_work_count = 0;
+		mt7915_mac_sta_stats_work(phy);
 	}
 
 	mutex_unlock(&mphy->dev->mutex);
