@@ -864,7 +864,8 @@ mt7915_tm_txbf_profile_update(struct mt7915_phy *phy, u16 *val, bool ebf)
 			 mt76_rr(dev, MT_ARB_TQSAXM0(phy->mt76->band_idx)));
 	} else if (!td->ebf && ebf) {
 		/* iBF's ebf profile update */
-		mt76_set(dev, MT_ARB_TQSAXM0(phy->mt76->band_idx), MT_ARB_IBF_ENABLE);
+		if (!is_mt7915(&dev->mt76) || !dev->dbdc_support)
+			mt76_set(dev, MT_ARB_TQSAXM0(phy->mt76->band_idx), MT_ARB_IBF_ENABLE);
 		dev_info(dev->mt76.dev, "Set TX queue start CR for AX management (0x%x) = 0x%x\n",
 			 MT_ARB_TQSAXM0(phy->mt76->band_idx),
 			 mt76_rr(dev, MT_ARB_TQSAXM0(phy->mt76->band_idx)));
@@ -954,6 +955,7 @@ mt7915_tm_txbf_profile_update_all(struct mt7915_phy *phy, u16 *val)
 {
 #define MT7915_TXBF_PFMU_DATA_LEN	(MT7915_TXBF_SUBCAR_NUM * sizeof(struct mt7915_pfmu_data))
 	struct mt76_testmode_data *td = &phy->mt76->test;
+	u8 nss = hweight8(td->tx_antenna_mask);
 	u16 pfmu_idx = val[0];
 	u16 subc_id = val[1];
 	u16 angle11 = val[2];
@@ -966,9 +968,9 @@ mt7915_tm_txbf_profile_update_all(struct mt7915_phy *phy, u16 *val)
 	if (subc_id > MT7915_TXBF_SUBCAR_NUM - 1)
 		return -EINVAL;
 
-	if (td->tx_antenna_mask == 2) {
+	if (nss == 2) {
 		phi11 = (s16)(angle21 - angle11);
-	} else if (td->tx_antenna_mask == 3) {
+	} else if (nss == 3) {
 		phi11 = (s16)(angle31 - angle11);
 		phi21 = (s16)(angle31 - angle21);
 	} else {
