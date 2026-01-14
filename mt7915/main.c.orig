@@ -522,7 +522,7 @@ static int mt7915_config(struct ieee80211_hw *hw, u32 changed)
 
 static int
 mt7915_conf_tx(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
-	       unsigned int link_id, u16 queue,
+	       u16 queue,
 	       const struct ieee80211_tx_queue_params *params)
 {
 	struct mt7915_vif *mvif = (struct mt7915_vif *)vif->drv_priv;
@@ -617,7 +617,7 @@ mt7915_update_bss_color(struct ieee80211_hw *hw,
 static void mt7915_bss_info_changed(struct ieee80211_hw *hw,
 				    struct ieee80211_vif *vif,
 				    struct ieee80211_bss_conf *info,
-				    u64 changed)
+				    u32 changed)
 {
 	struct mt7915_phy *phy = mt7915_hw_phy(hw);
 	struct mt7915_dev *dev = mt7915_hw_dev(hw);
@@ -637,7 +637,7 @@ static void mt7915_bss_info_changed(struct ieee80211_hw *hw,
 	}
 
 	if (changed & BSS_CHANGED_ASSOC)
-		mt7915_mcu_add_bss_info(phy, vif, vif->cfg.assoc);
+		mt7915_mcu_add_bss_info(phy, vif, info->assoc);
 
 	if (changed & BSS_CHANGED_ERP_CTS_PROT)
 		mt7915_mac_enable_rtscts(dev, vif, info->use_cts_prot);
@@ -1222,10 +1222,10 @@ static int mt7915_sta_set_txpwr(struct ieee80211_hw *hw,
 {
 	struct mt7915_phy *phy = mt7915_hw_phy(hw);
 	struct mt7915_dev *dev = mt7915_hw_dev(hw);
-	s16 txpower = sta->deflink.txpwr.power;
+	s16 txpower = sta->txpwr.power;
 	int ret;
 
-	if (sta->deflink.txpwr.type == NL80211_TX_POWER_AUTOMATIC)
+	if (sta->txpwr.type == NL80211_TX_POWER_AUTOMATIC)
 		txpower = 0;
 
 	mutex_lock(&dev->mt76.mutex);

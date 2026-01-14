@@ -638,8 +638,7 @@ void mt7915_dma_cleanup(struct mt7915_dev *dev);
 int mt7915_dma_reset(struct mt7915_dev *dev, bool force);
 int mt7915_txbf_init(struct mt7915_dev *dev);
 int mt7915_init_vif(struct mt7915_phy *phy, struct ieee80211_vif *vif, bool bf_en);
-void mt7915_init_txpower(struct mt7915_dev *dev,
-			 struct ieee80211_supported_band *sband);
+void mt7915_init_txpower(struct mt7915_phy *phy);
 void mt7915_reset(struct mt7915_dev *dev);
 int mt7915_run(struct ieee80211_hw *hw);
 int mt7915_mcu_init(struct mt7915_dev *dev);

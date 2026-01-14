@@ -3404,25 +3404,32 @@ int mt7915_mcu_set_txpower_sku(struct mt7915_phy *phy)
 	skb_put_data(skb, &la.path.ofdm_bf[1], sizeof(la.path.ofdm_bf) - 1);
 
 	/* HT20 and HT40 */
-	skb_put_data(skb, &la.path.ru[0], sizeof(la.path.ru[0]));
-	skb_put_data(skb, &la.path.ru_bf[0][1], sizeof(la.path.ru_bf[0]) - 1);
-	skb_put_data(skb, &la.path.ru[1], sizeof(la.path.ru[1]));
-	skb_put_data(skb, &la.path.ru_bf[1][1], sizeof(la.path.ru_bf[1]) - 1);
+	skb_put_data(skb, &la.path.ru[3], sizeof(la.path.ru[3]));
+	skb_put_data(skb, &la.path.ru_bf[3][1], sizeof(la.path.ru_bf[3]) - 1);
+	skb_put_data(skb, &la.path.ru[4], sizeof(la.path.ru[4]));
+	skb_put_data(skb, &la.path.ru_bf[4][1], sizeof(la.path.ru_bf[4]) - 1);
 
 	/* start from non-bf and bf fields of
 	 * BW20/RU242, BW40/RU484, BW80/RU996, BW160/RU2x996,
 	 * RU26, RU52, and RU106
 	 */
-	for (i = 7; i < 21; i++) {
-		bool bf = !(i % 2);
-		u8 idx = (i - 7) / 2;
+	for (i = 0; i < 8; i++) {
+		bool bf = i % 2;
+		u8 idx = (i + 6) / 2;
 		s8 *buf = bf ? la.path.ru_bf[idx] : la.path.ru[idx];
-
 		/* The non-bf fields of RU26 to RU106 are special cases */
-		if (bf && i < 15)
+		if (bf)
 			skb_put_data(skb, buf + 1, 9);
 		else
 			skb_put_data(skb, buf, 10);
+	}
+
+	for (i = 0; i < 6; i++) {
+		bool bf = i % 2;
+		u8 idx = i / 2;
+		s8 *buf = bf ? la.path.ru_bf[idx] : la.path.ru[idx];
+
+		skb_put_data(skb, buf, 10);
 	}
 
 	return mt76_mcu_skb_send_msg(&dev->mt76, skb,
