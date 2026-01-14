@@ -1913,11 +1913,14 @@ int mt7996_mcu_add_beacon(struct ieee80211_hw *hw,
 		goto out;
 
 	skb = ieee80211_beacon_get_template(hw, vif, &offs, 0);
-	if (!skb)
-		return -EINVAL;
+	if (!skb) {
+		dev_kfree_skb(rskb);
+ 		return -EINVAL;
+	}
 
 	if (skb->len > MAX_BEACON_SIZE - MT_TXD_SIZE) {
 		dev_err(dev->mt76.dev, "Bcn size limit exceed\n");
+		dev_kfree_skb(rskb);
 		dev_kfree_skb(skb);
 		return -EINVAL;
 	}
@@ -1968,11 +1971,14 @@ int mt7996_mcu_beacon_inband_discov(struct mt7996_dev *dev,
 		skb = ieee80211_get_unsol_bcast_probe_resp_tmpl(hw, vif);
 	}
 
-	if (!skb)
-		return -EINVAL;
+	if (!skb) {
+		dev_kfree_skb(rskb);
+ 		return -EINVAL;
+	}
 
 	if (skb->len > MAX_INBAND_FRAME_SIZE - MT_TXD_SIZE) {
 		dev_err(dev->mt76.dev, "inband discovery size limit exceed\n");
+		dev_kfree_skb(rskb);
 		dev_kfree_skb(skb);
 		return -EINVAL;
 	}
