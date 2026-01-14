@@ -127,11 +127,13 @@ void mt76_connac_tx_complete_skb(struct mt76_dev *mdev,
 				 struct mt76_queue_entry *e)
 {
 	if (!e->txwi) {
-		dev_kfree_skb_any(e->skb);
+		if(e->skb != DMA_DUMMY_DATA)
+			dev_kfree_skb_any(e->skb);
 		return;
 	}
 
 	/* error path */
+	/*
 	if (e->skb == DMA_DUMMY_DATA) {
 		struct mt76_connac_txp_common *txp;
 		struct mt76_txwi_cache *t;
@@ -147,7 +149,7 @@ void mt76_connac_tx_complete_skb(struct mt76_dev *mdev,
 		t = mt76_token_put(mdev, token);
 		e->skb = t ? t->skb : NULL;
 	}
-
+	*/
 	if (e->skb)
 		mt76_tx_complete_skb(mdev, e->wcid, e->skb);
 }
