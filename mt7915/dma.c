@@ -687,7 +687,7 @@ extern void mt7915_npu_rx_5g_tasklet(struct tasklet_struct *t);
 extern struct mt7915_dev *MT7915_2G;
 extern struct mt7915_dev *MT7915_5G;
 
-
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD
 void register_rx_data_done_task(struct mt7915_dev *dev, int enable)
 {
 	struct mt76_dev *mdev = &dev->mt76;
@@ -756,7 +756,7 @@ void register_rx_data_done_task(struct mt7915_dev *dev, int enable)
 		}			
 	}	
 }
-
+#endif
 
 int mt7915_dma_reset(struct mt7915_dev *dev, bool force)
 {

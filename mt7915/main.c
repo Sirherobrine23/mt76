@@ -1173,18 +1173,28 @@ static void mt7915_sta_statistics(struct ieee80211_hw *hw,
 		else
 			 sta_band=mphy->chandef.chan->band;  
 
-
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD	
 		counter_t pcount;
 		int i =0;
-		WIFI_MAIL_API_GET_WAIT_COUNTER(sta_band, &pcount); 
-
-
-	
+		WIFI_MAIL_API_GET_WAIT_COUNTER(sta_band, &pcount);
 		sinfo->rx_bytes = msta->wcid.stats.rx_bytes+pcount.rx_bytes_entry[msta->wcid.idx];
-		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_RX_BYTES64);
-		
 		sinfo->rx_packets = msta->wcid.stats.rx_packets+pcount.rx_pkts_entry[msta->wcid.idx];
+		sinfo->sta_rx_unicast= msta->wcid.stats.rx_packets+pcount.rx_pkts_entry[msta->wcid.idx]-msta->wcid.stats.rx_br-msta->wcid.stats.rx_mr;
+		sinfo->sta_rx_error= pcount.rx_error_entry[msta->wcid.idx];
+		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_RX_ERROR);
+		msta->vif->rx_errors += pcount.rx_error_entry[msta->wcid.idx];
+		sinfo->rx_dropped_misc= pcount.rx_dis_entry[msta->wcid.idx];
+		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_RX_DROP_MISC);
+		
+#else
+		sinfo->rx_bytes = msta->wcid.stats.rx_bytes;
+		sinfo->rx_packets = msta->wcid.stats.rx_packets;
+		sinfo->sta_rx_unicast= msta->wcid.stats.rx_packets-msta->wcid.stats.rx_br-msta->wcid.stats.rx_mr;
+
+#endif
+		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_RX_BYTES64);
 		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_RX_PACKETS);
+		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_RX_UNICAST);
 
 
 	sinfo->sta_rx_br = msta->wcid.stats.rx_br;
@@ -1192,20 +1202,7 @@ static void mt7915_sta_statistics(struct ieee80211_hw *hw,
 
 	sinfo->sta_rx_mr = msta->wcid.stats.rx_mr;
 	sinfo->filled |= BIT_ULL(NL80211_STA_INFO_RX_MULTICAST);
-
-	sinfo->sta_rx_unicast= msta->wcid.stats.rx_packets+pcount.rx_pkts_entry[msta->wcid.idx]-msta->wcid.stats.rx_br-msta->wcid.stats.rx_mr;
-	sinfo->filled |= BIT_ULL(NL80211_STA_INFO_RX_UNICAST);	
-
-	sinfo->sta_rx_error= pcount.rx_error_entry[msta->wcid.idx];
-	sinfo->filled |= BIT_ULL(NL80211_STA_INFO_RX_ERROR);	
 	
-	sinfo->rx_dropped_misc= pcount.rx_dis_entry[msta->wcid.idx];
-	sinfo->filled |= BIT_ULL(NL80211_STA_INFO_RX_DROP_MISC);	
-
-
-    msta->vif->rx_errors += pcount.rx_error_entry[msta->wcid.idx];
-
-
 	msta->vif->tx_bytes += msta->wcid.stats.tx_bytes- msta->wcid.stats.tx_bytes_tem;
 
 	msta->vif->tx_packets += msta->wcid.stats.tx_packets- msta->wcid.stats.tx_packets_tem;
@@ -1271,16 +1268,16 @@ static void mt7915_bss_statistics(struct ieee80211_hw *hw,
 					sta_band=mvif->mt76.band_idx;
 				else
 					 sta_band=mphy->chandef.chan->band;  
-				
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD					
 				counter_t pcount;
 				int i =0;
 				WIFI_MAIL_API_GET_WAIT_COUNTER(sta_band, &pcount); 
-
+#endif
 
 			int mvif_index=0;
 	
 			mvif_index=mvif->mt76.omac_idx==0?0:mvif->mt76.omac_idx-0x10;
-
+#ifdef TCSUPPORT_NPU_WIFI_OFFLOAD
 			if(sta_band==1){
 				mvif->rx_bytes=pcount.rxByteCount5G[mvif_index];
 				mvif->rx_packets=pcount.rxCount5G[mvif_index];
@@ -1293,7 +1290,7 @@ static void mt7915_bss_statistics(struct ieee80211_hw *hw,
 				mvif->rx_drops=pcount.drop2Gcnt[mvif_index];
 			
 			}
-
+#endif
 
 		mvif->rx_unicast=mvif->rx_packets-mvif->rx_br_cnt;
 
