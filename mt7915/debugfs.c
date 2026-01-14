@@ -1230,6 +1230,83 @@ mt7915_tx_stats_show(struct seq_file *file, void *data)
 
 DEFINE_SHOW_ATTRIBUTE(mt7915_tx_stats);
 
+static ssize_t
+mt7915_rx_stats_get(struct file *file, char __user *user_buf,
+			size_t count, loff_t *ppos)
+{
+	struct mt7915_phy *phy = file->private_data;
+	struct mt7915_dev *dev = phy->dev;
+	struct mib_stats *mib = &phy->mib;
+	static const size_t sz = 2048;
+	ssize_t ret;
+	char *buf;
+	int len = 0;
+	bool ext_phy = phy != &dev->phy;
+	u8 band = phy->mt76->band_idx;
+	u64 rx_error_cnt = 0;
+
+	buf = kzalloc(sz, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	len += scnprintf(buf + len, sz - len, "Per Radio Rx statistics:\n");
+	len += scnprintf(buf + len, sz - len,
+			"Phy %d, Phy band %d\n", ext_phy, band);
+
+	len += scnprintf(buf + len, sz - len,
+			"Vector Mismatch Count:\t %u\n", mib->rx_vector_mismatch_cnt);
+	rx_error_cnt += mib->rx_vector_mismatch_cnt;
+
+	len += scnprintf(buf + len, sz - len,
+			"Delimiter Count:\t %u\n", mib->rx_delimiter_fail_cnt);
+	rx_error_cnt += mib->rx_delimiter_fail_cnt;
+
+	len += scnprintf(buf + len, sz - len,
+			"FCS Error Count:\t %u\n", mib->fcs_err_cnt);
+	rx_error_cnt += mib->fcs_err_cnt;
+
+	len += scnprintf(buf + len, sz - len,
+			"FIFO Full Count:\t %u\n", mib->rx_fifo_full_cnt);
+	rx_error_cnt += mib->rx_fifo_full_cnt;
+
+	len += scnprintf(buf + len, sz - len,
+			"Len Mismatch:\t %u\n", mib->rx_len_mismatch_cnt);
+	rx_error_cnt += mib->rx_len_mismatch_cnt;
+
+	len += scnprintf(buf + len, sz - len,
+			"RX Error Count:\t %llu\n", rx_error_cnt);
+
+	ret = simple_read_from_buffer(user_buf, count, ppos, buf, len);
+
+	kfree(buf);
+	return ret;
+}
+
+static ssize_t
+mt7915_rx_stats_set(struct file *file, const char __user *user_buf,
+			size_t count, loff_t *ppos)
+{
+	struct mt7915_phy *phy = file->private_data;
+	struct mib_stats *mib = &phy->mib;
+
+	mib->rx_vector_mismatch_cnt = 0;
+	mib->rx_delimiter_fail_cnt = 0;
+	mib->fcs_err_cnt = 0;
+	mib->rx_fifo_full_cnt = 0;
+	mib->rx_len_mismatch_cnt = 0;
+
+	return count;
+}
+
+static const struct file_operations mt7915_rx_stats_fops = {
+	.write = mt7915_rx_stats_set,
+	.read = mt7915_rx_stats_get,
+	.open = simple_open,
+	.owner = THIS_MODULE,
+	.llseek = default_llseek,
+};
+
+
 static void
 mt7915_hw_queue_read(struct seq_file *s, u32 size,
 		     const struct hw_queue_map *map)
@@ -1725,6 +1802,7 @@ int mt7915_init_debugfs(struct mt7915_phy *phy)
 	debugfs_create_file("xmit-queues", 0400, dir, phy,
 			    &mt7915_xmit_queues_fops);
 	debugfs_create_file("tx_stats", 0400, dir, phy, &mt7915_tx_stats_fops);
+	debugfs_create_file("rx_stats", 0600, dir, phy, &mt7915_rx_stats_fops);
 	debugfs_create_file("sys_recovery", 0600, dir, phy,
 			    &mt7915_sys_recovery_ops);
 	debugfs_create_file("fw_debug_wm", 0600, dir, dev, &fops_fw_debug_wm);
