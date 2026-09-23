@@ -49,6 +49,11 @@ mt7603_rx_loopback_skb(struct mt7603_dev *dev, struct sk_buff *skb)
 
 	priv = msta = container_of(wcid, struct mt7603_sta, wcid);
 
+	/* The frame left the hardware: its TX status will not arrive. */
+	if (wcid->sta &&
+	    FIELD_GET(MT_TXD5_PID, le32_to_cpu(txd[5])) != MT_PACKET_ID_NO_ACK)
+		mt7603_hw_pending_dec(dev, msta);
+
 	sta = container_of(priv, struct ieee80211_sta, drv_priv);
 	hdr = (struct ieee80211_hdr *)&skb->data[MT_TXD_SIZE];
 
@@ -97,7 +102,7 @@ mt7603_rx_loopback_skb(struct mt7603_dev *dev, struct sk_buff *skb)
 
 	spin_lock_bh(&dev->ps_lock);
 	__skb_queue_tail(&msta->psq, skb);
-	if (skb_queue_len(&msta->psq) >= 64) {
+	if (skb_queue_len(&msta->psq) >= MT7603_PSQ_MAX) {
 		skb = __skb_dequeue(&msta->psq);
 		dev_kfree_skb(skb);
 	}

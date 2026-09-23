@@ -1095,6 +1095,10 @@ int mt7603_tx_prepare_skb(struct mt76_dev *mdev, void *txwi_ptr,
 
 	pid = mt76_tx_status_skb_add(mdev, wcid, tx_info->skb);
 
+	/* Owed until its TX status arrives or a loop-back returns it. */
+	if (sta && pid != MT_PACKET_ID_NO_ACK)
+		mt7603_hw_pending_inc(dev, msta);
+
 	if (info->flags & IEEE80211_TX_CTL_RATE_CTRL_PROBE) {
 		spin_lock_bh(&dev->mt76.lock);
 		mt7603_wtbl_set_rates(dev, msta, &info->control.rates[0],
@@ -1299,6 +1303,9 @@ void mt7603_mac_add_txs(struct mt7603_dev *dev, void *data)
 	msta = container_of(wcid, struct mt7603_sta, wcid);
 	sta = wcid_to_sta(wcid);
 	mt76_wcid_add_poll(&dev->mt76, &msta->wcid);
+
+	if (wcid->sta)
+		mt7603_hw_pending_dec(dev, msta);
 
 	if (mt7603_mac_add_txs_skb(dev, msta, pid, txs_data))
 		goto out;
@@ -1878,6 +1885,56 @@ mt7603_mac_ps_check(struct mt7603_dev *dev)
 	rcu_read_unlock();
 }
 
+/* Lift the hold on a station's tx queues and get the scheduler going. */
+void mt7603_hw_release(struct mt7603_dev *dev, struct mt7603_sta *msta)
+{
+	struct ieee80211_sta *sta;
+	int i;
+
+	if (!test_and_clear_bit(MT_WCID_FLAG_TX_HOLD, &msta->wcid.flags))
+		return;
+
+	sta = container_of((void *)msta, struct ieee80211_sta, drv_priv);
+	for (i = 0; i < ARRAY_SIZE(sta->txq); i++)
+		if (sta->txq[i])
+			ieee80211_schedule_txq(mt76_hw(dev), sta->txq[i]);
+	mt76_worker_schedule(&dev->mt76.tx_worker);
+}
+
+/*
+ * Every frame counted ends in a TX status or a loop-back return. If a held
+ * station saw neither for a second, its count is off: start over instead
+ * of keeping it on hold. Turning the cap off releases every hold.
+ */
+static void
+mt7603_hw_cap_check(struct mt7603_dev *dev)
+{
+	bool enabled = READ_ONCE(dev->hw_cap_high);
+	int i;
+
+	rcu_read_lock();
+	for (i = 0; i < MT7603_WTBL_STA; i++) {
+		struct mt76_wcid *wcid = mt76_wcid_ptr(dev, i);
+		struct mt7603_sta *msta;
+
+		if (!wcid || !wcid->sta ||
+		    !test_bit(MT_WCID_FLAG_TX_HOLD, &wcid->flags))
+			continue;
+
+		msta = container_of(wcid, struct mt7603_sta, wcid);
+		if (enabled &&
+		    time_before(jiffies, READ_ONCE(msta->hw_settled) + HZ))
+			continue;
+
+		if (enabled) {
+			atomic_set(&msta->hw_pending, 0);
+			dev->hw_cap_resync++;
+		}
+		mt7603_hw_release(dev, msta);
+	}
+	rcu_read_unlock();
+}
+
 void mt7603_mac_work(struct work_struct *work)
 {
 	struct mt7603_dev *dev = container_of(work, struct mt7603_dev,
@@ -1893,6 +1950,7 @@ void mt7603_mac_work(struct work_struct *work)
 	mt76_update_survey(&dev->mphy);
 	mt7603_edcca_check(dev);
 	mt7603_mac_ps_check(dev);
+	mt7603_hw_cap_check(dev);
 
 	for (i = 0, idx = 0; i < 2; i++) {
 		u32 val = mt76_rr(dev, MT_TX_AGG_CNT(i));

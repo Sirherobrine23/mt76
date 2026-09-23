@@ -559,6 +559,8 @@ int mt7603_register_device(struct mt7603_dev *dev)
 	dev->slottime = 9;
 	dev->sensitivity_limit = 28;
 	dev->dynamic_sensitivity = true;
+	dev->hw_cap_high = MT7603_HW_CAP_HIGH;
+	dev->hw_cap_low = MT7603_HW_CAP_LOW;
 
 	ret = mt7603_init_hardware(dev);
 	if (ret)

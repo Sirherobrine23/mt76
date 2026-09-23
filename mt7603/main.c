@@ -339,6 +339,8 @@ mt7603_sta_add(struct mt76_dev *mdev, struct ieee80211_vif *vif,
 
 	INIT_LIST_HEAD(&msta->wcid.poll_list);
 	__skb_queue_head_init(&msta->psq);
+	atomic_set(&msta->hw_pending, 0);
+	msta->hw_settled = jiffies;
 	msta->ps = ~0;
 	msta->smps = ~0;
 	msta->wcid.sta = 1;
@@ -391,14 +393,22 @@ mt7603_sta_remove(struct mt76_dev *mdev, struct ieee80211_vif *vif,
 }
 
 static void
-mt7603_ps_tx_list(struct mt7603_dev *dev, struct sk_buff_head *list)
+mt7603_ps_tx_list(struct mt7603_dev *dev, struct mt7603_sta *msta,
+		  struct sk_buff_head *list)
 {
 	struct sk_buff *skb;
 
 	while ((skb = __skb_dequeue(list)) != NULL) {
 		int qid = skb_get_queue_mapping(skb);
+		bool txs = le32_get_bits(((__le32 *)skb->data)[5],
+					 MT_TXD5_PID) != MT_PACKET_ID_NO_ACK;
 
-		mt76_tx_queue_skb_raw(dev, dev->mphy.q_tx[qid], skb, 0);
+		/* Count it before the TX status can arrive. */
+		if (txs)
+			mt7603_hw_pending_inc(dev, msta);
+		if (mt76_tx_queue_skb_raw(dev, dev->mphy.q_tx[qid], skb, 0) &&
+		    txs)
+			mt7603_hw_pending_dec(dev, msta);
 	}
 }
 
@@ -420,7 +430,7 @@ mt7603_sta_ps(struct mt76_dev *mdev, struct ieee80211_sta *sta, bool ps)
 	skb_queue_splice_tail_init(&msta->psq, &list);
 	spin_unlock_bh(&dev->ps_lock);
 
-	mt7603_ps_tx_list(dev, &list);
+	mt7603_ps_tx_list(dev, msta, &list);
 }
 
 static struct ieee80211_hdr *
@@ -529,7 +539,7 @@ mt7603_release_buffered_frames(struct ieee80211_hw *hw,
 		    !ieee80211_is_data_qos(mt7603_ps_skb_hdr(last)->frame_control);
 	last_tid = __fls(tids);
 
-	mt7603_ps_tx_list(dev, &list);
+	mt7603_ps_tx_list(dev, msta, &list);
 
 	if (eosp_null)
 		ieee80211_send_eosp_nullfunc(sta, last_tid);

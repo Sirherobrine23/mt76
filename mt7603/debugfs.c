@@ -93,6 +93,34 @@ mt7603_ampdu_stat_show(struct seq_file *file, void *data)
 
 DEFINE_SHOW_ATTRIBUTE(mt7603_ampdu_stat);
 
+static int
+mt7603_hw_cap_read(struct seq_file *s, void *data)
+{
+	struct mt7603_dev *dev = dev_get_drvdata(s->private);
+	int i;
+
+	seq_printf(s, "high %u low %u resync %u\n",
+		   READ_ONCE(dev->hw_cap_high), READ_ONCE(dev->hw_cap_low),
+		   READ_ONCE(dev->hw_cap_resync));
+
+	rcu_read_lock();
+	for (i = 0; i < MT7603_WTBL_STA; i++) {
+		struct mt76_wcid *wcid = mt76_wcid_ptr(dev, i);
+		struct mt7603_sta *msta;
+
+		if (!wcid || !wcid->sta)
+			continue;
+
+		msta = container_of(wcid, struct mt7603_sta, wcid);
+		seq_printf(s, "wcid %d pending %d hold %d\n", i,
+			   atomic_read(&msta->hw_pending),
+			   test_bit(MT_WCID_FLAG_TX_HOLD, &wcid->flags));
+	}
+	rcu_read_unlock();
+
+	return 0;
+}
+
 void mt7603_init_debugfs(struct mt7603_dev *dev)
 {
 	struct dentry *dir;
@@ -115,4 +143,8 @@ void mt7603_init_debugfs(struct mt7603_dev *dev)
 			    &dev->sensitivity_limit);
 	debugfs_create_bool("dynamic_sensitivity", 0600, dir,
 			    &dev->dynamic_sensitivity);
+	debugfs_create_u32("hw_cap_high", 0600, dir, &dev->hw_cap_high);
+	debugfs_create_u32("hw_cap_low", 0600, dir, &dev->hw_cap_low);
+	debugfs_create_devm_seqfile(dev->mt76.dev, "hw_cap", dir,
+				    mt7603_hw_cap_read);
 }

@@ -20,6 +20,19 @@
 #define MT7603_TX_RING_SIZE	256
 #define MT7603_PSD_RING_SIZE	128
 
+/*
+ * Frames a station may have in the hardware (tx ring and PSE) before its
+ * tx queues are held, and the count at which they are released.
+ */
+#define MT7603_HW_CAP_HIGH	96
+#define MT7603_HW_CAP_LOW	48
+
+/*
+ * Frames looped back by the PSE for a sleeping station. They are sent again
+ * on wake-up, so leave room in the tx ring for other traffic.
+ */
+#define MT7603_PSQ_MAX		(MT7603_TX_RING_SIZE - 64)
+
 #define MT7603_FIRMWARE_E1	"mt7603_e1.bin"
 #define MT7603_FIRMWARE_E2	"mt7603_e2.bin"
 #define MT7628_FIRMWARE_E1	"mt7628_e1.bin"
@@ -81,6 +94,14 @@ struct mt7603_sta {
 
 	u8 ps;
 	u8 ps_sleeping;
+
+	/*
+	 * Frames queued to the hardware that still owe a TX status. The
+	 * hardware completes frames to mac80211 once DMA has copied them, so
+	 * AQL cannot bound how many it holds for the station.
+	 */
+	atomic_t hw_pending;
+	unsigned long hw_settled;
 };
 
 struct mt7603_vif {
@@ -157,7 +178,37 @@ struct mt7603_dev {
 	u32 reset_test;
 
 	unsigned int reset_cause[__RESET_CAUSE_MAX];
+
+	/* per-station cap on frames in the hardware, 0 = off (debugfs) */
+	u32 hw_cap_high;
+	u32 hw_cap_low;
+	u32 hw_cap_resync;
 };
+
+void mt7603_hw_release(struct mt7603_dev *dev, struct mt7603_sta *msta);
+
+static inline void
+mt7603_hw_pending_inc(struct mt7603_dev *dev, struct mt7603_sta *msta)
+{
+	int pending = atomic_inc_return(&msta->hw_pending);
+	u32 high = READ_ONCE(dev->hw_cap_high);
+
+	if (high && pending >= high &&
+	    !test_and_set_bit(MT_WCID_FLAG_TX_HOLD, &msta->wcid.flags))
+		WRITE_ONCE(msta->hw_settled, jiffies);
+}
+
+static inline void
+mt7603_hw_pending_dec(struct mt7603_dev *dev, struct mt7603_sta *msta)
+{
+	WRITE_ONCE(msta->hw_settled, jiffies);
+	if (!atomic_add_unless(&msta->hw_pending, -1, 0))
+		return;
+
+	if (test_bit(MT_WCID_FLAG_TX_HOLD, &msta->wcid.flags) &&
+	    atomic_read(&msta->hw_pending) <= READ_ONCE(dev->hw_cap_low))
+		mt7603_hw_release(dev, msta);
+}
 
 extern const struct mt76_driver_ops mt7603_drv_ops;
 extern const struct ieee80211_ops mt7603_ops;
