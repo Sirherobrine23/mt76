@@ -543,6 +543,10 @@ mt76_txq_send_burst(struct mt76_phy *phy, struct mt76_queue *q,
 		if (stop || mt76_txq_stopped(q))
 			break;
 
+		/* The previous frame may have filled the hardware. */
+		if (test_bit(MT_WCID_FLAG_TX_HOLD, &wcid->flags))
+			break;
+
 		skb = mt76_txq_dequeue(phy, mtxq);
 		if (!skb)
 			break;
@@ -626,6 +630,9 @@ mt76_txq_schedule_list(struct mt76_phy *phy, enum mt76_txq_id qid)
 
 		if (atomic_read(&mt76_wcid_primary(wcid)->non_aql_packets) >=
 		    MT_MAX_NON_AQL_PKT)
+			continue;
+		/* The driver schedules the queues again when it lifts the hold. */
+		if (test_bit(MT_WCID_FLAG_TX_HOLD, &wcid->flags))
 			continue;
 		if (dev->queue_ops->tx_cleanup &&
 		    q->queued + 2 * MT_TXQ_FREE_THR >= q->ndesc) {
