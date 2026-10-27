@@ -307,7 +307,11 @@ mt7603_init_hardware(struct mt7603_dev *dev)
 		return ret;
 
 	mt7603_dma_sched_init(dev);
-	mt7603_mcu_set_eeprom(dev);
+	ret = mt7603_mcu_set_eeprom(dev);
+	if (ret) {
+		dev_err(dev->mt76.dev, "EEPROM MCU setup failed: %d\n", ret);
+		return ret;
+	}
 	mt7603_phy_init(dev);
 	mt7603_mac_init(dev);
 

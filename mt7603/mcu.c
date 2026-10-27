@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 
 #include <linux/firmware.h>
+#include <linux/moduleparam.h>
 #include "mt7603.h"
 #include "mcu.h"
 #include "eeprom.h"
@@ -233,6 +234,16 @@ void mt7603_mcu_exit(struct mt7603_dev *dev)
 	skb_queue_purge(&dev->mt76.mcu.res_q);
 }
 
+/*
+ * Diagnostic selector for the EN7528/MT7603E initialization hang.
+ * 0: omit command; 1: original FLASH/buffer command; 2: EFUSE source.
+ * Source 2 must not be used as normal calibration with flash EEPROM.
+ */
+static int mt7603_eeprom_upload_mode = 2;
+module_param_named(eeprom_upload_mode, mt7603_eeprom_upload_mode, int, 0444);
+MODULE_PARM_DESC(eeprom_upload_mode,
+	"0: skip EEPROM MCU upload, 1: buffer (default), 2: eFuse probe");
+
 int mt7603_mcu_set_eeprom(struct mt7603_dev *dev)
 {
 	static const u16 req_fields[] = {
@@ -318,6 +329,22 @@ int mt7603_mcu_set_eeprom(struct mt7603_dev *dev)
 
 	BUILD_BUG_ON(ARRAY_SIZE(req_fields) * sizeof(*data) > size);
 
+	if (mt7603_eeprom_upload_mode == 0) {
+		dev_warn(dev->mt76.dev,
+			 "MT7603 MCU EEPROM upload skipped for diagnostics\n");
+		return 0;
+	}
+	if (mt7603_eeprom_upload_mode != 1 &&
+	    mt7603_eeprom_upload_mode != 2)
+		return -EINVAL;
+
+	if (mt7603_eeprom_upload_mode == 2) {
+		req_hdr.buffer_mode = 0; /* vendor EEPROM_MODE_EFUSE */
+		req_hdr.len = 0;
+	}
+
+	dev_info(dev->mt76.dev, "MCU trace: EEPROM alloc len=%d fields=%zu\n",
+		len, ARRAY_SIZE(req_fields));
 	req = kmalloc(len, GFP_KERNEL);
 	if (!req)
 		return -ENOMEM;
@@ -325,13 +352,15 @@ int mt7603_mcu_set_eeprom(struct mt7603_dev *dev)
 	memcpy(req, &req_hdr, sizeof(req_hdr));
 	data = (struct req_data *)(req + sizeof(req_hdr));
 	memset(data, 0, size);
-	for (i = 0; i < ARRAY_SIZE(req_fields); i++) {
+	for (i = 0; i < ARRAY_SIZE(req_fields) && mt7603_eeprom_upload_mode == 1; i++) {
 		data[i].addr = cpu_to_le16(req_fields[i]);
 		data[i].val = eep[req_fields[i]];
 	}
 
+	dev_info(dev->mt76.dev, "MCU trace: EEPROM request ready\n");
 	ret = mt76_mcu_send_msg(&dev->mt76, MCU_EXT_CMD_EFUSE_BUFFER_MODE,
 				req, len, true);
+	dev_info(dev->mt76.dev, "MCU trace: EEPROM request returned=%d\n", ret);
 	kfree(req);
 
 	return ret;
