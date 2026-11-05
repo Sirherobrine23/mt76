@@ -328,6 +328,23 @@ int mt7915_dma_start(struct mt7915_dev *dev, bool reset, bool wed_reset)
 		if (ret)
 			return ret;
 
+		/* Note: the vendor driver turns on CTXD for the WED rings 18/19
+		 * and TX flow control when WED is used. Without them the MT7916
+		 * stops taking WED frames after a few and the MCU times out.
+		 */
+		if (is_mt7916(&dev->mt76)) {
+			mt76_rmw(dev, MT_WFDMA0_CTXD_CFG,
+				 MT_WFDMA0_CTXD_CASCADE_NUM |
+				 MT_WFDMA0_CTXD_BAND1_RING |
+				 MT_WFDMA0_CTXD_BAND0_RING,
+				 FIELD_PREP(MT_WFDMA0_CTXD_BAND1_RING, 19) |
+				 MT_WFDMA0_CTXD_BAND1_EN |
+				 FIELD_PREP(MT_WFDMA0_CTXD_BAND0_RING, 18) |
+				 MT_WFDMA0_CTXD_BAND0_EN);
+			mt76_set(dev, MT_WFDMA0_GLO_CFG_EXT1,
+				 MT_WFDMA0_GLO_CFG_EXT1_TX_FCTRL);
+		}
+
 		mtk_wed_device_start(&dev->mt76.mmio.wed, wed_irq_mask);
 	}
 
