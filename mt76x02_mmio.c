@@ -9,6 +9,7 @@
 
 #include "mt76x02.h"
 #include "mt76x02_mcu.h"
+#include "mt76x02_irq_ack.h"
 #include "trace.h"
 
 static void mt76x02_pre_tbtt_tasklet(struct tasklet_struct *t)
@@ -258,20 +259,16 @@ EXPORT_SYMBOL_GPL(mt76x02_rx_poll_complete);
 irqreturn_t mt76x02_irq_handler(int irq, void *dev_instance)
 {
 	struct mt76x02_dev *dev = dev_instance;
-	u32 intr, mask;
+	u32 intr, mask, pending, enabled;
+	unsigned long flags;
 
-	intr = mt76_rr(dev, MT_INT_SOURCE_CSR);
-	/*
-	 * Acknowledge everything the device raised, then pick out what we
-	 * handle. Masking first leaves any source we do not subscribe to
-	 * asserted for good: the chip keeps raising TXDELAYINT here, it never
-	 * appears in irqmask, and so it was never written back. On a shared
-	 * INTx line that is enough to keep the pin low and have the host
-	 * re-enter this handler forever, which starves everything else on the
-	 * CPU -- no timers, no threads, and nothing in the log to say why.
-	 */
-	mt76_wr(dev, MT_INT_SOURCE_CSR, intr);
-	intr &= dev->mt76.mmio.irqmask;
+	/* Serialize with NAPI IRQ reenable without clearing its masked DONE. */
+	spin_lock_irqsave(&dev->mt76.mmio.irq_lock, flags);
+	pending = mt76_rr(dev, MT_INT_SOURCE_CSR);
+	enabled = dev->mt76.mmio.irqmask;
+	mt76_wr(dev, MT_INT_SOURCE_CSR, mt76x02_irq_ack_sources(pending, enabled));
+	intr = pending & enabled;
+	spin_unlock_irqrestore(&dev->mt76.mmio.irq_lock, flags);
 
 	if (!test_bit(MT76_STATE_INITIALIZED, &dev->mphy.state))
 		return IRQ_NONE;
