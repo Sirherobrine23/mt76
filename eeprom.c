@@ -7,6 +7,7 @@
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/partitions.h>
 #include <linux/nvmem-consumer.h>
+#include <linux/firmware.h>
 #include <linux/etherdevice.h>
 #include "mt76.h"
 #include "mt76_connac.h"
@@ -151,6 +152,33 @@ exit:
 }
 EXPORT_SYMBOL_GPL(mt76_get_of_data_from_nvmem);
 
+static int mt76_get_of_data_from_firmware(struct mt76_dev *dev, void *eep, int len)
+{
+	struct device_node *np = dev->dev->of_node;
+	const struct firmware *fw;
+	const char *name;
+	int ret;
+
+	if (of_property_read_string(np, "mediatek,eeprom-name", &name))
+		return -ENOENT;
+
+	ret = request_firmware(&fw, name, dev->dev);
+	if (ret)
+		return ret;
+
+	if (fw->size < len) {
+		dev_err(dev->dev, "Invalid eeprom file %s, size %zu < %d\n",
+			name, fw->size, len);
+		ret = -EINVAL;
+	} else {
+		memcpy(eep, fw->data, len);
+	}
+
+	release_firmware(fw);
+
+	return ret;
+}
+
 static int mt76_get_of_eeprom(struct mt76_dev *dev, void *eep, int len)
 {
 	struct device_node *np = dev->dev->of_node;
@@ -167,7 +195,11 @@ static int mt76_get_of_eeprom(struct mt76_dev *dev, void *eep, int len)
 	if (!ret)
 		return 0;
 
-	return mt76_get_of_data_from_nvmem(dev, eep, "eeprom", len);
+	ret = mt76_get_of_data_from_nvmem(dev, eep, "eeprom", len);
+	if (!ret)
+		return 0;
+
+	return mt76_get_of_data_from_firmware(dev, eep, len);
 }
 
 int
