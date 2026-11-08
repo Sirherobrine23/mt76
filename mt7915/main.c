@@ -766,7 +766,7 @@ int mt7915_mac_sta_add(struct mt76_dev *mdev, struct ieee80211_vif *vif,
 	struct mt7915_sta *msta = (struct mt7915_sta *)sta->drv_priv;
 	struct mt7915_vif *mvif = (struct mt7915_vif *)vif->drv_priv;
 	bool ext_phy = mvif->phy != &dev->phy;
-	int idx;
+	int idx, err;
 
 	if (mtk_wed_device_active(&dev->mt76.mmio.wed) &&
 	    !is_mt7915(&dev->mt76) &&
@@ -778,6 +778,12 @@ int mt7915_mac_sta_add(struct mt76_dev *mdev, struct ieee80211_vif *vif,
 
 	if (idx < 0)
 		return -ENOSPC;
+
+	err = mt7915_npu_sta_clear(dev, mvif->phy->mt76->band_idx, idx);
+	if (err) {
+		mt76_wcid_mask_clear(mdev->wcid_mask, idx);
+		return err;
+	}
 
 	INIT_LIST_HEAD(&msta->rc_list);
 	INIT_LIST_HEAD(&msta->wcid.poll_list);
@@ -909,6 +915,12 @@ void mt7915_mac_sta_remove(struct mt76_dev *mdev, struct ieee80211_vif *vif,
 {
 	struct mt7915_dev *dev = container_of(mdev, struct mt7915_dev, mt76);
 	struct mt7915_sta *msta = (struct mt7915_sta *)sta->drv_priv;
+	int err;
+
+	err = mt7915_npu_sta_clear(dev, msta->vif->phy->mt76->band_idx,
+				   msta->wcid.idx);
+	if (err)
+		dev_warn(mdev->dev, "NPU station cleanup failed: %d\n", err);
 
 	mt7915_mac_wtbl_update(dev, msta->wcid.idx,
 			       MT_WTBL_UPDATE_ADM_COUNT_CLEAR);
@@ -988,10 +1000,21 @@ mt7915_ampdu_action(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 		mt76_rx_aggr_start(&dev->mt76, &msta->wcid, tid, ssn,
 				   params->buf_size);
 		ret = mt7915_mcu_add_rx_ba(dev, params, true);
+		if (!ret)
+			ret = mt7915_npu_ba(dev, msta->vif->phy->mt76->band_idx,
+					    msta->wcid.idx, tid, ssn,
+					    params->buf_size);
+		if (ret) {
+			mt7915_mcu_add_rx_ba(dev, params, false);
+			mt76_rx_aggr_stop(&dev->mt76, &msta->wcid, tid);
+		}
 		break;
 	case IEEE80211_AMPDU_RX_STOP:
 		mt76_rx_aggr_stop(&dev->mt76, &msta->wcid, tid);
-		ret = mt7915_mcu_add_rx_ba(dev, params, false);
+		ret = mt7915_npu_ba(dev, msta->vif->phy->mt76->band_idx,
+				    msta->wcid.idx, tid, 0, 0);
+		if (!ret)
+			ret = mt7915_mcu_add_rx_ba(dev, params, false);
 		break;
 	case IEEE80211_AMPDU_TX_OPERATIONAL:
 		mtxq->aggr = true;

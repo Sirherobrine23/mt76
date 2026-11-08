@@ -311,9 +311,6 @@ int mt7915_dma_start(struct mt7915_dev *dev, bool reset, bool wed_reset)
 	if (dev->dbdc_support || dev->phy.mt76->band_idx)
 		irq_mask |= MT_INT_BAND1_RX_DONE;
 
-	if (mt7915_npu_active(dev))
-		irq_mask &= ~(MT_INT_RX(MT_RXQ_MAIN) | MT_INT_RX(MT_RXQ_BAND1));
-
 	if (mtk_wed_device_active(&dev->mt76.mmio.wed) && wed_reset) {
 		u32 wed_irq_mask = irq_mask;
 		int ret;
@@ -332,7 +329,8 @@ int mt7915_dma_start(struct mt7915_dev *dev, bool reset, bool wed_reset)
 		 * and TX flow control when WED is used. Without them the MT7916
 		 * stops taking WED frames after a few and the MCU times out.
 		 */
-		if (is_mt7916(&dev->mt76)) {
+		if (is_mt7916(&dev->mt76))
+		{
 			mt76_rmw(dev, MT_WFDMA0_CTXD_CFG,
 				 MT_WFDMA0_CTXD_CASCADE_NUM |
 				 MT_WFDMA0_CTXD_BAND1_RING |
@@ -347,6 +345,9 @@ int mt7915_dma_start(struct mt7915_dev *dev, bool reset, bool wed_reset)
 
 		mtk_wed_device_start(&dev->mt76.mmio.wed, wed_irq_mask);
 	}
+
+	if (mt7915_npu_active(dev))
+		irq_mask &= ~(MT_INT_RX(MT_RXQ_MAIN) | MT_INT_RX(MT_RXQ_BAND1));
 
 	irq_mask = reset ? MT_INT_MCU_CMD : irq_mask;
 

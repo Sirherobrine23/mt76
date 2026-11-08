@@ -443,6 +443,9 @@ int mt76_npu_init(struct mt76_dev *dev, phys_addr_t phy_addr, int type)
 	struct airoha_npu *npu;
 	int err = 0;
 
+	if (!(is_mt7996(dev) || is_mt7992(dev) || is_mt7990(dev)))
+		return -EOPNOTSUPP;
+
 	mutex_lock(&dev->mutex);
 
 	npu = airoha_npu_get(dev->dev);

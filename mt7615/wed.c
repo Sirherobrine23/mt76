@@ -5,7 +5,7 @@
 #include "mac.h"
 
 #if IS_ENABLED(CONFIG_NET_AIROHA_SOC_WED)
-static bool wed_enable = true;
+static bool wed_enable;
 module_param(wed_enable, bool, 0644);
 MODULE_PARM_DESC(wed_enable, "Enable Airoha WED transmit offload");
 

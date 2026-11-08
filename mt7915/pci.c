@@ -136,10 +136,7 @@ static int mt7915_pci_probe(struct pci_dev *pdev,
 	mdev = &dev->mt76;
 	mt7915_wfsys_reset(dev);
 
-	if (mt7915_npu_requested(dev) && !mt7915_npu_wed_requested(dev))
-		ret = 0;
-	else
-		ret = mt7915_mmio_wed_init(dev, pdev, true, &irq);
+	ret = mt7915_mmio_wed_init(dev, pdev, true, &irq);
 	if (ret < 0)
 		goto free_wed_or_irq_vector;
 
