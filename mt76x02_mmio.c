@@ -261,8 +261,17 @@ irqreturn_t mt76x02_irq_handler(int irq, void *dev_instance)
 	u32 intr, mask;
 
 	intr = mt76_rr(dev, MT_INT_SOURCE_CSR);
-	intr &= dev->mt76.mmio.irqmask;
+	/*
+	 * Acknowledge everything the device raised, then pick out what we
+	 * handle. Masking first leaves any source we do not subscribe to
+	 * asserted for good: the chip keeps raising TXDELAYINT here, it never
+	 * appears in irqmask, and so it was never written back. On a shared
+	 * INTx line that is enough to keep the pin low and have the host
+	 * re-enter this handler forever, which starves everything else on the
+	 * CPU -- no timers, no threads, and nothing in the log to say why.
+	 */
 	mt76_wr(dev, MT_INT_SOURCE_CSR, intr);
+	intr &= dev->mt76.mmio.irqmask;
 
 	if (!test_bit(MT76_STATE_INITIALIZED, &dev->mphy.state))
 		return IRQ_NONE;
