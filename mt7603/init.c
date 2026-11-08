@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 
 #include <linux/etherdevice.h>
+#include <linux/of.h>
 #include "mt7603.h"
 #include "mac.h"
 #include "eeprom.h"
@@ -339,6 +340,42 @@ static const struct ieee80211_iface_combination if_comb[] = {
 	}
 };
 
+static void mt7603_gpio_led_init(struct mt7603_dev *dev)
+{
+	u32 addr, val;
+
+	/* Select GPIO function 2 for the two active-low panel LED pads. */
+	addr = mt7603_reg_map(dev, MT_GPIO_PINMUX_SEL2);
+	val = mt76_rr(dev, addr);
+	val &= ~(MT_GPIO_PINMUX_SEL2_G12 | MT_GPIO_PINMUX_SEL2_G13);
+	val |= FIELD_PREP(MT_GPIO_PINMUX_SEL2_G12, 0x2) |
+	       FIELD_PREP(MT_GPIO_PINMUX_SEL2_G13, 0x2);
+	mt76_wr(dev, addr, val);
+
+	addr = mt7603_reg_map(dev, MT_GPIO_OE1_SET);
+	mt76_wr(dev, addr, MT_GPIO_LED_MASK);
+}
+
+static void mt7603_gpio_led_set(struct mt7603_dev *dev, bool on)
+{
+	u32 addr;
+
+	/* Active-low: drive low to illuminate the LED. */
+	if (on)
+		addr = mt7603_reg_map(dev, MT_GPIO_DOUT1_RESET);
+	else
+		addr = mt7603_reg_map(dev, MT_GPIO_DOUT1_SET);
+	mt76_wr(dev, addr, MT_GPIO_LED_MASK);
+}
+
+static int mt7603_gpio_led_set_blink(struct led_classdev *led_cdev,
+				     unsigned long *delay_on,
+				     unsigned long *delay_off)
+{
+	/* The MAC LED pad is not routed, so fall back to software blinking. */
+	return -EINVAL;
+}
+
 static void mt7603_led_set_config(struct mt76_phy *mphy, u8 delay_on,
 				  u8 delay_off)
 {
@@ -361,6 +398,9 @@ static void mt7603_led_set_config(struct mt76_phy *mphy, u8 delay_on,
 		val |= MT_LED_CTRL_POLARITY(mphy->leds.pin);
 	addr = mt7603_reg_map(dev, MT_LED_CTRL);
 	mt76_wr(dev, addr, val);
+
+	if (dev->gpio_led)
+		mt7603_gpio_led_set(dev, delay_on != 0);
 }
 
 static int mt7603_led_set_blink(struct led_classdev *led_cdev,
@@ -547,6 +587,14 @@ int mt7603_register_device(struct mt7603_dev *dev)
 	if (IS_ENABLED(CONFIG_MT76_LEDS)) {
 		dev->mphy.leds.cdev.brightness_set = mt7603_led_set_brightness;
 		dev->mphy.leds.cdev.blink_set = mt7603_led_set_blink;
+
+		if (of_property_read_bool(dev->mt76.dev->of_node,
+					  "mediatek,gpio-led")) {
+			dev->gpio_led = true;
+			dev->mphy.leds.cdev.blink_set = mt7603_gpio_led_set_blink;
+			mt7603_gpio_led_init(dev);
+			mt7603_gpio_led_set(dev, false);
+		}
 	}
 
 	wiphy->reg_notifier = mt7603_regd_notifier;
