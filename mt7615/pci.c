@@ -63,8 +63,9 @@ static void mt7615_pci_remove(struct pci_dev *pdev)
 	struct mt76_dev *mdev = pci_get_drvdata(pdev);
 	struct mt7615_dev *dev = container_of(mdev, struct mt7615_dev, mt76);
 
+	mt76_set_irq_mask(mdev, MT_INT_MASK_CSR, ~0, 0);
+	devm_free_irq(&pdev->dev, dev->irq, dev);
 	mt7615_unregister_device(dev);
-	devm_free_irq(&pdev->dev, pdev->irq, dev);
 	pci_free_irq_vectors(pdev);
 }
 
@@ -75,6 +76,10 @@ static int mt7615_pci_suspend(struct pci_dev *pdev, pm_message_t state)
 	struct mt7615_dev *dev = container_of(mdev, struct mt7615_dev, mt76);
 	bool hif_suspend;
 	int i, err;
+
+	/* WED keeps DMA mappings until detach; do not power down its PCI bus. */
+	if (mtk_wed_device_active(&mdev->mmio.wed))
+		return -EBUSY;
 
 	err = mt76_connac_pm_wake(&dev->mphy, &dev->pm);
 	if (err < 0)

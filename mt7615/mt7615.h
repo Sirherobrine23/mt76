@@ -245,6 +245,7 @@ struct mt7615_dev {
 	};
 
 	const struct mt76_bus_ops *bus_ops;
+	int irq;
 	struct mt7615_phy phy;
 	u64 omac_mask;
 
@@ -390,6 +391,7 @@ int mt7615_eeprom_get_power_delta_index(struct mt7615_dev *dev,
 					enum nl80211_band band);
 int mt7615_wait_pdma_busy(struct mt7615_dev *dev);
 int mt7615_dma_init(struct mt7615_dev *dev);
+int mt7615_wed_init(struct mt7615_dev *dev, struct device *device, int *irq);
 void mt7615_dma_start(struct mt7615_dev *dev);
 void mt7615_dma_cleanup(struct mt7615_dev *dev);
 int mt7615_mcu_init(struct mt7615_dev *dev);

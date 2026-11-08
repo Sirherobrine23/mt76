@@ -73,7 +73,10 @@ static irqreturn_t mt7615_irq_handler(int irq, void *dev_instance)
 {
 	struct mt7615_dev *dev = dev_instance;
 
-	mt76_wr(dev, MT_INT_MASK_CSR, 0);
+	if (mtk_wed_device_active(&dev->mt76.mmio.wed))
+		mtk_wed_device_irq_set_mask(&dev->mt76.mmio.wed, 0);
+	else
+		mt76_wr(dev, MT_INT_MASK_CSR, 0);
 
 	if (!test_bit(MT76_STATE_INITIALIZED, &dev->mphy.state))
 		return IRQ_NONE;
@@ -89,11 +92,19 @@ static void mt7615_irq_tasklet(struct tasklet_struct *t)
 	u32 intr, mask = 0, tx_mcu_mask = mt7615_tx_mcu_int_mask(dev);
 	u32 mcu_int;
 
-	mt76_wr(dev, MT_INT_MASK_CSR, 0);
+	if (mtk_wed_device_active(&dev->mt76.mmio.wed))
+		mtk_wed_device_irq_set_mask(&dev->mt76.mmio.wed, 0);
+	else
+		mt76_wr(dev, MT_INT_MASK_CSR, 0);
 
-	intr = mt76_rr(dev, MT_INT_SOURCE_CSR);
-	intr &= dev->mt76.mmio.irqmask;
-	mt76_wr(dev, MT_INT_SOURCE_CSR, intr);
+	if (mtk_wed_device_active(&dev->mt76.mmio.wed)) {
+		intr = mtk_wed_device_irq_get(&dev->mt76.mmio.wed,
+					      dev->mt76.mmio.irqmask);
+	} else {
+		intr = mt76_rr(dev, MT_INT_SOURCE_CSR);
+		intr &= dev->mt76.mmio.irqmask;
+		mt76_wr(dev, MT_INT_SOURCE_CSR, intr);
+	}
 
 	trace_dev_irq(&dev->mt76, intr, dev->mt76.mmio.irqmask);
 
@@ -221,8 +232,16 @@ int mt7615_mmio_probe(struct device *pdev, void __iomem *mem_base,
 	bus_ops->rmw = mt7615_rmw;
 	dev->mt76.bus = bus_ops;
 
-	mt76_wr(dev, MT_INT_MASK_CSR, 0);
+	if (mtk_wed_device_active(&dev->mt76.mmio.wed))
+		mtk_wed_device_irq_set_mask(&dev->mt76.mmio.wed, 0);
+	else
+		mt76_wr(dev, MT_INT_MASK_CSR, 0);
 
+	ret = mt7615_wed_init(dev, pdev, &irq);
+	if (ret)
+		goto err_free_dev;
+
+	dev->irq = irq;
 	ret = devm_request_irq(mdev->dev, irq, mt7615_irq_handler,
 			       IRQF_SHARED, KBUILD_MODNAME, dev);
 	if (ret)
@@ -240,6 +259,8 @@ int mt7615_mmio_probe(struct device *pdev, void __iomem *mem_base,
 err_free_irq:
 	devm_free_irq(pdev, irq, dev);
 err_free_dev:
+	if (mtk_wed_device_active(&dev->mt76.mmio.wed))
+		mtk_wed_device_detach(&dev->mt76.mmio.wed);
 	mt76_free_device(&dev->mt76);
 
 	return ret;

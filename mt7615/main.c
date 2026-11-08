@@ -704,8 +704,8 @@ void mt7615_mac_sta_remove(struct mt76_dev *mdev, struct ieee80211_vif *vif,
 EXPORT_SYMBOL_GPL(mt7615_mac_sta_remove);
 
 static void mt7615_sta_rate_tbl_update(struct ieee80211_hw *hw,
-				       struct ieee80211_vif *vif,
-				       struct ieee80211_sta *sta)
+				      struct ieee80211_vif *vif,
+				      struct ieee80211_sta *sta)
 {
 	struct mt7615_dev *dev = mt7615_hw_dev(hw);
 	struct mt7615_phy *phy = mt7615_hw_phy(hw);
@@ -1318,6 +1318,34 @@ static void mt7615_set_rekey_data(struct ieee80211_hw *hw,
 }
 #endif /* CONFIG_PM */
 
+#if IS_ENABLED(CONFIG_NET_AIROHA_SOC_WED)
+static int mt7615_net_fill_forward_path(struct ieee80211_hw *hw,
+					struct ieee80211_vif *vif,
+					struct ieee80211_sta *sta,
+					struct net_device_path_ctx *ctx,
+					struct net_device_path *path)
+{
+	struct mt7615_dev *dev = mt7615_hw_dev(hw);
+	struct mt7615_vif *mvif = (struct mt7615_vif *)vif->drv_priv;
+	struct mt7615_sta *msta = (struct mt7615_sta *)sta->drv_priv;
+	struct mtk_wed_device *wed = &dev->mt76.mmio.wed;
+
+	if (!mtk_wed_device_active(wed))
+		return -ENODEV;
+
+	path->type = DEV_PATH_MTK_WDMA;
+	path->dev = ctx->dev;
+	path->mtk_wdma.wdma_idx = wed->wdma_idx;
+	path->mtk_wdma.bss = mvif->mt76.idx;
+	/* Both PHYs share MT7615 TX ring 0. */
+	path->mtk_wdma.queue = 0;
+	path->mtk_wdma.wcid = msta->wcid.idx;
+	ctx->dev = NULL;
+
+	return 0;
+}
+#endif
+
 const struct ieee80211_ops mt7615_ops = {
 	.add_chanctx = ieee80211_emulate_add_chanctx,
 	.remove_chanctx = ieee80211_emulate_remove_chanctx,
@@ -1369,6 +1397,10 @@ const struct ieee80211_ops mt7615_ops = {
 	.set_rekey_data = mt7615_set_rekey_data,
 #endif /* CONFIG_PM */
 	.set_sar_specs = mt7615_set_sar_specs,
+#if IS_ENABLED(CONFIG_NET_AIROHA_SOC_WED)
+	.net_fill_forward_path = mt7615_net_fill_forward_path,
+	.net_setup_tc = mt76_wed_net_setup_tc,
+#endif
 };
 EXPORT_SYMBOL_GPL(mt7615_ops);
 

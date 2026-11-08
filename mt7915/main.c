@@ -1804,7 +1804,7 @@ out:
 	return ret;
 }
 
-#ifdef CONFIG_NET_MEDIATEK_SOC_WED
+#if IS_ENABLED(CONFIG_NET_MEDIATEK_SOC_WED) || IS_ENABLED(CONFIG_NET_AIROHA_SOC_WED)
 static int
 mt7915_net_fill_forward_path(struct ieee80211_hw *hw,
 			     struct ieee80211_vif *vif,
@@ -1829,7 +1829,8 @@ mt7915_net_fill_forward_path(struct ieee80211_hw *hw,
 	path->mtk_wdma.wdma_idx = wed->wdma_idx;
 	path->mtk_wdma.bss = mvif->mt76.idx;
 	path->mtk_wdma.queue = phy->mt76->band_idx;
-	if (test_bit(MT_WCID_FLAG_4ADDR, &msta->wcid.flags) ||
+	if (IS_ENABLED(CONFIG_NET_AIROHA_SOC_WED) ||
+	    test_bit(MT_WCID_FLAG_4ADDR, &msta->wcid.flags) ||
 	    is_mt7915(&dev->mt76))
 		path->mtk_wdma.wcid = msta->wcid.idx;
 	else
@@ -1907,7 +1908,7 @@ const struct ieee80211_ops mt7915_ops = {
 	.sta_add_debugfs = mt7915_sta_add_debugfs,
 #endif
 	.set_radar_background = mt7915_set_radar_background,
-#ifdef CONFIG_NET_MEDIATEK_SOC_WED
+#if IS_ENABLED(CONFIG_NET_MEDIATEK_SOC_WED) || IS_ENABLED(CONFIG_NET_AIROHA_SOC_WED)
 	.net_fill_forward_path = mt7915_net_fill_forward_path,
 	.net_setup_tc = mt76_wed_net_setup_tc,
 #endif

@@ -116,6 +116,11 @@ void mt7615_dma_reset(struct mt7615_dev *dev)
 {
 	int i;
 
+	if (mtk_wed_device_active(&dev->mt76.mmio.wed)) {
+		mtk_wed_device_dma_reset(&dev->mt76.mmio.wed);
+		mt76_wed_dma_reset(&dev->mt76);
+	}
+
 	mt76_clear(dev, MT_WPDMA_GLO_CFG,
 		   MT_WPDMA_GLO_CFG_RX_DMA_EN | MT_WPDMA_GLO_CFG_TX_DMA_EN |
 		   MT_WPDMA_GLO_CFG_TX_WRITEBACK_DONE);

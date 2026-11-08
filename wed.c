@@ -28,7 +28,7 @@ void mt76_wed_release_rx_buf(struct mtk_wed_device *wed)
 }
 EXPORT_SYMBOL_GPL(mt76_wed_release_rx_buf);
 
-#ifdef CONFIG_NET_MEDIATEK_SOC_WED
+#if IS_ENABLED(CONFIG_NET_MEDIATEK_SOC_WED) || IS_ENABLED(CONFIG_NET_AIROHA_SOC_WED)
 u32 mt76_wed_init_rx_buf(struct mtk_wed_device *wed, int size)
 {
 	struct mtk_wed_bm_desc *desc = wed->rx_buf_ring.desc;
@@ -87,11 +87,21 @@ int mt76_wed_offload_enable(struct mtk_wed_device *wed)
 {
 	struct mt76_dev *dev = mt76_wed_to_dev(wed);
 
+	int token_size;
+
 	spin_lock_bh(&dev->token_lock);
+	token_size = dev->token_size;
 	dev->token_size = wed->wlan.token_start;
 	spin_unlock_bh(&dev->token_lock);
 
-	return !wait_event_timeout(dev->tx_wait, !dev->wed_token_count, HZ);
+	if (wait_event_timeout(dev->tx_wait, !dev->wed_token_count, HZ))
+		return 0;
+
+	spin_lock_bh(&dev->token_lock);
+	dev->token_size = token_size;
+	spin_unlock_bh(&dev->token_lock);
+
+	return -ETIMEDOUT;
 }
 EXPORT_SYMBOL_GPL(mt76_wed_offload_enable);
 

@@ -124,6 +124,8 @@ void mt7615_unregister_device(struct mt7615_dev *dev)
 	mt7615_tx_token_put(dev);
 	mt7615_dma_cleanup(dev);
 	tasklet_disable(&dev->mt76.irq_tasklet);
+	if (mtk_wed_device_active(&dev->mt76.mmio.wed))
+		mtk_wed_device_detach(&dev->mt76.mmio.wed);
 
 	mt76_free_device(&dev->mt76);
 }

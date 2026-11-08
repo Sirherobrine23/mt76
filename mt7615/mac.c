@@ -2106,6 +2106,8 @@ void mt7615_tx_token_put(struct mt7615_dev *dev)
 		mt7615_txwi_free(dev, txwi);
 	spin_unlock_bh(&dev->mt76.token_lock);
 	idr_destroy(&dev->mt76.token);
+	dev->mt76.wed_token_count = 0;
+	wake_up(&dev->mt76.tx_wait);
 }
 EXPORT_SYMBOL_GPL(mt7615_tx_token_put);
 

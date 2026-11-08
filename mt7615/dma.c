@@ -44,6 +44,8 @@ mt7622_init_tx_queues_multi(struct mt7615_dev *dev)
 static int
 mt7615_init_tx_queues(struct mt7615_dev *dev)
 {
+	struct mtk_wed_device *wed = &dev->mt76.mmio.wed;
+	int size = MT7615_TX_RING_SIZE;
 	int ret;
 
 	ret = mt76_init_mcu_queue(&dev->mt76, MT_MCUQ_FWDL, MT7615_TXQ_FWDL,
@@ -54,8 +56,11 @@ mt7615_init_tx_queues(struct mt7615_dev *dev)
 	if (!is_mt7615(&dev->mt76))
 		return mt7622_init_tx_queues_multi(dev);
 
-	ret = mt76_connac_init_tx_queues(&dev->mphy, 0, MT7615_TX_RING_SIZE,
-					 MT_TX_RING_BASE, NULL, 0);
+	if (mtk_wed_device_active(wed))
+		size = 2048;
+
+	ret = mt76_connac_init_tx_queues(&dev->mphy, 0, size,
+					 MT_TX_RING_BASE, wed, MT_WED_Q_TX(0));
 	if (ret)
 		return ret;
 
@@ -200,6 +205,10 @@ static void mt7663_dma_sched_init(struct mt7615_dev *dev)
 
 void mt7615_dma_start(struct mt7615_dev *dev)
 {
+	if (mtk_wed_device_active(&dev->mt76.mmio.wed))
+		mtk_wed_device_start(&dev->mt76.mmio.wed,
+				     dev->mt76.mmio.irqmask);
+
 	/* start dma engine */
 	mt76_set(dev, MT_WPDMA_GLO_CFG,
 		 MT_WPDMA_GLO_CFG_TX_DMA_EN |
@@ -261,6 +270,11 @@ int mt7615_dma_init(struct mt7615_dev *dev)
 	if (ret)
 		return ret;
 
+	if (mtk_wed_device_active(&dev->mt76.mmio.wed)) {
+		dev->mt76.q_rx[MT_RXQ_MCU].flags = MT_WED_Q_TXFREE;
+		dev->mt76.q_rx[MT_RXQ_MCU].wed = &dev->mt76.mmio.wed;
+	}
+
 	/* init rx queues */
 	ret = mt76_queue_alloc(dev, &dev->mt76.q_rx[MT_RXQ_MCU], 1,
 			       MT7615_RX_MCU_RING_SIZE, MT_RX_BUF_SIZE,
@@ -307,6 +321,9 @@ int mt7615_dma_init(struct mt7615_dev *dev)
 
 void mt7615_dma_cleanup(struct mt7615_dev *dev)
 {
+	if (mtk_wed_device_active(&dev->mt76.mmio.wed))
+		mtk_wed_device_stop(&dev->mt76.mmio.wed);
+
 	mt76_clear(dev, MT_WPDMA_GLO_CFG,
 		   MT_WPDMA_GLO_CFG_TX_DMA_EN |
 		   MT_WPDMA_GLO_CFG_RX_DMA_EN);

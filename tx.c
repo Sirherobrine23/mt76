@@ -974,7 +974,7 @@ int mt76_token_consume(struct mt76_dev *dev, struct mt76_txwi_cache **ptxwi)
 		}
 	}
 
-#ifdef CONFIG_NET_MEDIATEK_SOC_WED
+#if IS_ENABLED(CONFIG_NET_MEDIATEK_SOC_WED) || IS_ENABLED(CONFIG_NET_AIROHA_SOC_WED)
 	if (mtk_wed_device_active(&dev->mmio.wed) &&
 	    token >= dev->mmio.wed.wlan.token_start)
 		dev->wed_token_count++;
@@ -1024,7 +1024,7 @@ mt76_token_release(struct mt76_dev *dev, int token, bool *wake)
 				wake_up(&dev->tx_wait);
 		}
 
-#ifdef CONFIG_NET_MEDIATEK_SOC_WED
+#if IS_ENABLED(CONFIG_NET_MEDIATEK_SOC_WED) || IS_ENABLED(CONFIG_NET_AIROHA_SOC_WED)
 		if (mtk_wed_device_active(&dev->mmio.wed) &&
 		    token >= dev->mmio.wed.wlan.token_start &&
 		    --dev->wed_token_count == 0)

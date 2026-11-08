@@ -1809,7 +1809,7 @@ out:
 
 int mt7915_mcu_wed_enable_rx_stats(struct mt7915_dev *dev)
 {
-#ifdef CONFIG_NET_MEDIATEK_SOC_WED
+#if IS_ENABLED(CONFIG_NET_MEDIATEK_SOC_WED) || IS_ENABLED(CONFIG_NET_AIROHA_SOC_WED)
 	struct mtk_wed_device *wed = &dev->mt76.mmio.wed;
 	struct {
 		__le32 args[2];
@@ -1817,6 +1817,9 @@ int mt7915_mcu_wed_enable_rx_stats(struct mt7915_dev *dev)
 		.args[0] = cpu_to_le32(1),
 		.args[1] = cpu_to_le32(6),
 	};
+
+	if (!mtk_wed_get_rx_capa(wed))
+		return 0;
 
 	return mtk_wed_device_update_msg(wed, MTK_WED_WO_CMD_RXCNT_CTRL,
 					 &req, sizeof(req));
@@ -2448,7 +2451,7 @@ int mt7915_mcu_init_firmware(struct mt7915_dev *dev)
 
 	mt76_connac_mcu_del_wtbl_all(&dev->mt76);
 
-#if IS_ENABLED(CONFIG_NET_MEDIATEK_SOC_WED)
+#if IS_ENABLED(CONFIG_NET_MEDIATEK_SOC_WED) || IS_ENABLED(CONFIG_NET_AIROHA_SOC_WED)
 	if (mtk_wed_device_active(&dev->mt76.mmio.wed)) {
 		if (is_mt7915(&dev->mt76) ||
 		    !mtk_wed_get_rx_capa(&dev->mt76.mmio.wed))

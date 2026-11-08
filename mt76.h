@@ -1261,7 +1261,7 @@ void mt76_wed_dma_reset(struct mt76_dev *dev);
 int mt76_wed_net_setup_tc(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 			  struct net_device *netdev, enum tc_setup_type type,
 			  void *type_data);
-#ifdef CONFIG_NET_MEDIATEK_SOC_WED
+#if IS_ENABLED(CONFIG_NET_MEDIATEK_SOC_WED) || IS_ENABLED(CONFIG_NET_AIROHA_SOC_WED)
 u32 mt76_wed_init_rx_buf(struct mtk_wed_device *wed, int size);
 int mt76_wed_offload_enable(struct mtk_wed_device *wed);
 int mt76_wed_dma_setup(struct mt76_dev *dev, struct mt76_queue *q, bool reset);
@@ -1307,7 +1307,7 @@ static inline int mt76_wed_dma_setup(struct mt76_dev *dev, struct mt76_queue *q,
 
 static inline struct mt76_dev *mt76_wed_to_dev(struct mtk_wed_device *wed)
 {
-#ifdef CONFIG_NET_MEDIATEK_SOC_WED
+#if IS_ENABLED(CONFIG_NET_MEDIATEK_SOC_WED) || IS_ENABLED(CONFIG_NET_AIROHA_SOC_WED)
 	if (wed->wlan.hif2)
 		return container_of(wed, struct mt76_dev, mmio.wed_hif2);
 #endif /* CONFIG_NET_MEDIATEK_SOC_WED */
@@ -2115,6 +2115,11 @@ mt76_token_get(struct mt76_dev *dev, struct mt76_txwi_cache **ptxwi)
 
 	spin_lock_bh(&dev->token_lock);
 	token = idr_alloc(&dev->token, *ptxwi, 0, dev->token_size, GFP_ATOMIC);
+#if IS_ENABLED(CONFIG_NET_AIROHA_SOC_WED)
+	if (mtk_wed_device_active(&dev->mmio.wed) &&
+	    token >= dev->mmio.wed.wlan.token_start)
+		dev->wed_token_count++;
+#endif
 	spin_unlock_bh(&dev->token_lock);
 
 	return token;
@@ -2127,6 +2132,12 @@ mt76_token_put(struct mt76_dev *dev, int token)
 
 	spin_lock_bh(&dev->token_lock);
 	txwi = idr_remove(&dev->token, token);
+#if IS_ENABLED(CONFIG_NET_AIROHA_SOC_WED)
+	if (txwi && mtk_wed_device_active(&dev->mmio.wed) &&
+	    token >= dev->mmio.wed.wlan.token_start &&
+	    --dev->wed_token_count == 0)
+		wake_up(&dev->tx_wait);
+#endif
 	spin_unlock_bh(&dev->token_lock);
 
 	return txwi;

@@ -51,7 +51,7 @@
 static inline bool
 mt76_dma_handle_read(struct mt76_queue *q, u32 offset, u32 *val)
 {
-#if IS_ENABLED(CONFIG_NET_MEDIATEK_SOC_WED)
+#if IS_ENABLED(CONFIG_NET_MEDIATEK_SOC_WED) || IS_ENABLED(CONFIG_NET_AIROHA_SOC_WED)
 	if (q->flags & MT_QFLAG_WED) {
 		*val = mtk_wed_device_reg_read(q->wed, q->wed_regs + offset);
 
@@ -79,7 +79,7 @@ mt76_dma_handle_read(struct mt76_queue *q, u32 offset, u32 *val)
 static inline bool
 mt76_dma_handle_write(struct mt76_queue *q, u32 offset, u32 val)
 {
-#if IS_ENABLED(CONFIG_NET_MEDIATEK_SOC_WED)
+#if IS_ENABLED(CONFIG_NET_MEDIATEK_SOC_WED) || IS_ENABLED(CONFIG_NET_AIROHA_SOC_WED)
 	if (q->flags & MT_QFLAG_WED) {
 		mtk_wed_device_reg_write(q->wed, q->wed_regs + offset, val);
 

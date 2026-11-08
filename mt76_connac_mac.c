@@ -202,7 +202,7 @@ static void
 mt76_connac_txp_skb_unmap_fw(struct mt76_dev *mdev,
 			     struct mt76_connac_fw_txp *txp)
 {
-	struct device *dev = is_connac_v1(mdev) ? mdev->dev : mdev->dma_dev;
+	struct device *dev = mdev->dma_dev;
 	int i;
 
 	for (i = 0; i < txp->nbuf; i++)
