@@ -1579,7 +1579,8 @@ void mt76_rx_complete(struct mt76_dev *dev, struct sk_buff_head *frames,
 
 #if IS_ENABLED(CONFIG_NET_AIROHA_WHNAT)
 	/* Looked up once per poll; the hook keeps the frames it takes. */
-	whnat_early = symbol_get(en75_whnat_upstream_early);
+	if (!mtk_wed_device_active(&dev->mmio.wed))
+		whnat_early = symbol_get(en75_whnat_upstream_early);
 #endif
 	list_for_each_entry_safe(skb, tmp, &list, list) {
 		skb_list_del_init(skb);
