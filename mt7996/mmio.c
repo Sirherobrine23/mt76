@@ -14,7 +14,7 @@
 #include "../trace.h"
 #include "../dma.h"
 
-static bool wed_enable;
+static bool wed_enable = true;
 module_param(wed_enable, bool, 0644);
 
 #define INVALID_REG_ADDR	0xffffffff

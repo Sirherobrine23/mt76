@@ -13,7 +13,7 @@
 #include "../trace.h"
 #include "../dma.h"
 
-static bool wed_enable;
+static bool wed_enable = true;
 module_param(wed_enable, bool, 0644);
 MODULE_PARM_DESC(wed_enable, "Enable Wireless Ethernet Dispatch support");
 
@@ -637,7 +637,7 @@ int mt7915_mmio_wed_init(struct mt7915_dev *dev, void *pdev_ptr,
 	struct mtk_wed_device *wed = &dev->mt76.mmio.wed;
 	int ret;
 
-	if (!wed_enable && !mt7915_npu_wed_requested(dev))
+	if (!wed_enable)
 		return 0;
 
 	if (pci) {
