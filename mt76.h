@@ -2188,4 +2188,8 @@ mt76_vif_link_phy(struct mt76_vif_link *mlink)
 	return ctx->phy;
 }
 
+#if IS_ENABLED(CONFIG_NET_AIROHA_WHNAT)
+bool en75_whnat_upstream_early(struct sk_buff *skb);
+#endif
+
 #endif

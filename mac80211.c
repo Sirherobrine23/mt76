@@ -1545,6 +1545,7 @@ mt76_check_sta(struct mt76_dev *dev, struct sk_buff *skb)
 void mt76_rx_complete(struct mt76_dev *dev, struct sk_buff_head *frames,
 		      struct napi_struct *napi)
 {
+	bool (*whnat_early)(struct sk_buff *skb) = NULL;
 	struct ieee80211_sta *sta;
 	struct ieee80211_hw *hw;
 	struct sk_buff *skb, *tmp;
@@ -1576,10 +1577,20 @@ void mt76_rx_complete(struct mt76_dev *dev, struct sk_buff_head *frames,
 		return;
 	}
 
+#if IS_ENABLED(CONFIG_NET_AIROHA_WHNAT)
+	/* Looked up once per poll; the hook keeps the frames it takes. */
+	whnat_early = symbol_get(en75_whnat_upstream_early);
+#endif
 	list_for_each_entry_safe(skb, tmp, &list, list) {
 		skb_list_del_init(skb);
+		if (whnat_early && whnat_early(skb))
+			continue;
 		napi_gro_receive(napi, skb);
 	}
+#if IS_ENABLED(CONFIG_NET_AIROHA_WHNAT)
+	if (whnat_early)
+		symbol_put(en75_whnat_upstream_early);
+#endif
 }
 
 void mt76_rx_poll_complete(struct mt76_dev *dev, enum mt76_rxq_id q,
