@@ -698,8 +698,23 @@ mt76_dma_tx_queue_skb(struct mt76_phy *phy, struct mt76_queue *q,
 	txwi = mt76_get_txwi_ptr(dev, t);
 
 	skb->prev = skb->next = NULL;
-	if (dev->drv->drv_flags & MT_DRV_TX_ALIGNED4_SKBS)
+	if (dev->drv->drv_flags & MT_DRV_TX_ALIGNED4_SKBS) {
+		/* Diagnostic only: catch whoever hands us an skb that cannot
+		 * take the two-byte pad. Same condition mt76_insert_hdr_pad()
+		 * would have pushed on, so it stays quiet for frames that do
+		 * not need the pad at all.
+		 */
+		if (unlikely(skb_headroom(skb) < 2 &&
+			     ieee80211_get_hdrlen_from_skb(skb) % 4))
+			WARN_ONCE(1,
+				  "mt76: hdr pad without headroom: dev=%s headroom=%u len=%u cloned=%d shared=%d\n",
+				  skb->dev ? skb->dev->name : "none",
+				  skb_headroom(skb), skb->len,
+				  skb_cloned(skb), skb_shared(skb));
+		if (skb_cow_head(skb, 2))
+			goto free;
 		mt76_insert_hdr_pad(skb);
+	}
 
 	len = skb_headlen(skb);
 	addr = dma_map_single(dev->dma_dev, skb->data, len, DMA_TO_DEVICE);
