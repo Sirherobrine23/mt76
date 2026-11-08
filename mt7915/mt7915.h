@@ -261,6 +261,8 @@ struct mt7915_dev {
 		struct mt76_phy mphy;
 	};
 
+	struct mt7915_npu *npu;
+
 	struct mt7915_hif *hif2;
 	struct mt7915_reg_desc reg;
 	u8 q_id[MT7915_MAX_QUEUE];
@@ -341,6 +343,10 @@ struct mt7915_dev {
 	void __iomem *dcm;
 	void __iomem *sku;
 };
+
+/* mt76/mac80211 private data aliases the first union of this structure. */
+static_assert(offsetof(struct mt7915_dev, mt76) == 0);
+static_assert(offsetof(struct mt7915_dev, mphy) == 0);
 
 enum {
 	WFDMA0 = 0x0,
@@ -579,6 +585,64 @@ int mt7915_mcu_fw_log_2_host(struct mt7915_dev *dev, u8 type, u8 ctrl);
 int mt7915_mcu_fw_dbg_ctrl(struct mt7915_dev *dev, u32 module, u8 level);
 void mt7915_mcu_rx_event(struct mt7915_dev *dev, struct sk_buff *skb);
 void mt7915_mcu_exit(struct mt7915_dev *dev);
+
+#ifdef CONFIG_MT7915_NPU
+bool mt7915_npu_requested(struct mt7915_dev *dev);
+bool mt7915_npu_wed_requested(struct mt7915_dev *dev);
+bool mt7915_npu_active(struct mt7915_dev *dev);
+int mt7915_npu_init(struct mt7915_dev *dev);
+int mt7915_npu_rx_ring(struct mt7915_dev *dev, enum mt76_rxq_id qid,
+			unsigned int count, u32 regs);
+int mt7915_npu_start(struct mt7915_dev *dev);
+int mt7915_npu_stop(struct mt7915_dev *dev);
+void mt7915_npu_cleanup(struct mt7915_dev *dev);
+void mt7915_npu_debugfs(struct mt7915_dev *dev, struct dentry *dir);
+#else
+static inline bool mt7915_npu_requested(struct mt7915_dev *dev)
+{
+	return false;
+}
+
+static inline bool mt7915_npu_wed_requested(struct mt7915_dev *dev)
+{
+	return false;
+}
+
+static inline bool mt7915_npu_active(struct mt7915_dev *dev)
+{
+	return false;
+}
+
+static inline int mt7915_npu_init(struct mt7915_dev *dev)
+{
+	return 0;
+}
+
+static inline int mt7915_npu_rx_ring(struct mt7915_dev *dev,
+				      enum mt76_rxq_id qid,
+				      unsigned int count, u32 regs)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int mt7915_npu_start(struct mt7915_dev *dev)
+{
+	return 0;
+}
+
+static inline int mt7915_npu_stop(struct mt7915_dev *dev)
+{
+	return 0;
+}
+
+static inline void mt7915_npu_cleanup(struct mt7915_dev *dev)
+{
+}
+
+static inline void mt7915_npu_debugfs(struct mt7915_dev *dev, struct dentry *dir)
+{
+}
+#endif
 
 static inline u16 mt7915_wtbl_size(struct mt7915_dev *dev)
 {

@@ -23,3 +23,14 @@ config MT798X_WMAC
 	  This adds support for the built-in WMAC on MT7981 and MT7986 SoC device
 	  which has the same feature set as a MT7915, but enables 6E
 	  support.
+
+config MT7915_NPU
+	bool "MT7915 ClankerNPU receive support on EN7523"
+	depends on MT7915E
+	depends on NET_AIROHA_NPU=y || MT7915E=NET_AIROHA_NPU
+	help
+	  Enable the ClankerNPU 24-byte receive transport on EN7523. This needs
+	  a single PCIe MT7915 DBDC radio, matching firmware,
+	  an explicit device-tree configuration and npu_enable=1.
+	  Receive reordering remains on the host. A DT opt-in allows WED TX
+	  alongside NPU RX. If unsure, say N.

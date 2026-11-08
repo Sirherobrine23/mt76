@@ -637,7 +637,7 @@ int mt7915_mmio_wed_init(struct mt7915_dev *dev, void *pdev_ptr,
 	struct mtk_wed_device *wed = &dev->mt76.mmio.wed;
 	int ret;
 
-	if (!wed_enable)
+	if (!wed_enable && !mt7915_npu_wed_requested(dev))
 		return 0;
 
 	if (pci) {
