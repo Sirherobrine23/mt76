@@ -1482,7 +1482,9 @@ static void mt7603_mac_watchdog_reset(struct mt7603_dev *dev)
 	}
 
 	if (dev->reset_cause[RESET_CAUSE_RESET_FAILED] ||
-	    dev->cur_reset_cause == RESET_CAUSE_RX_PSE_BUSY)
+	    dev->cur_reset_cause == RESET_CAUSE_RX_PSE_BUSY ||
+	    (dev->cur_reset_cause == RESET_CAUSE_BEACON_STUCK &&
+	     dev->reset_cause[RESET_CAUSE_BEACON_STUCK] >= 2))
 		mt7603_pse_reset(dev);
 
 	if (!dev->reset_cause[RESET_CAUSE_RESET_FAILED]) {
