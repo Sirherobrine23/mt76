@@ -1334,6 +1334,8 @@ mt76_check_ccmp_pn(struct sk_buff *skb)
 
 	if (!(status->flag & RX_FLAG_DECRYPTED))
 		return;
+	if (status->flag & RX_FLAG_PN_VALIDATED)
+		return;
 
 	if (status->flag & RX_FLAG_ONLY_MONITOR)
 		return;
@@ -1597,6 +1599,8 @@ void mt76_rx_complete(struct mt76_dev *dev, struct sk_buff_head *frames,
 void mt76_rx_poll_complete(struct mt76_dev *dev, enum mt76_rxq_id q,
 			   struct napi_struct *napi)
 {
+	bool host_reorder = (q == MT_RXQ_NPU0 || q == MT_RXQ_NPU1) &&
+			    !mt76_npu_device_active(dev);
 	struct sk_buff_head frames;
 	struct sk_buff *skb;
 
@@ -1604,8 +1608,9 @@ void mt76_rx_poll_complete(struct mt76_dev *dev, enum mt76_rxq_id q,
 
 	while ((skb = __skb_dequeue(&dev->rx_skb[q])) != NULL) {
 		mt76_check_sta(dev, skb);
-		if (mtk_wed_device_active(&dev->mmio.wed) ||
-		    mt76_npu_device_active(dev))
+		if (!host_reorder &&
+		    (mtk_wed_device_active(&dev->mmio.wed) ||
+		     mt76_npu_device_active(dev)))
 			__skb_queue_tail(&frames, skb);
 		else
 			mt76_rx_aggr_reorder(skb, &frames);

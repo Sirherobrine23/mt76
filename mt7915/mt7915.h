@@ -597,7 +597,7 @@ void mt7915_npu_cleanup(struct mt7915_dev *dev);
 int mt7915_npu_ba(struct mt7915_dev *dev, unsigned int band, u16 wcid,
 		  u8 tid, u16 ssn, u16 size);
 int mt7915_npu_sta_clear(struct mt7915_dev *dev, unsigned int band, u16 wcid);
-void mt7915_npu_rx_status(struct mt7915_dev *dev, struct sk_buff *skb);
+void mt7915_npu_rx_status(struct mt7915_dev *dev, struct sk_buff *skb, u32 info);
 void mt7915_npu_debugfs(struct mt7915_dev *dev, struct dentry *dir);
 #else
 static inline bool mt7915_npu_active(struct mt7915_dev *dev)
@@ -644,7 +644,7 @@ static inline int mt7915_npu_sta_clear(struct mt7915_dev *dev,
 }
 
 static inline void mt7915_npu_rx_status(struct mt7915_dev *dev,
-				     struct sk_buff *skb)
+				     struct sk_buff *skb, u32 info)
 {
 }
 

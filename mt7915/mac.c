@@ -1085,7 +1085,7 @@ void mt7915_queue_rx_skb(struct mt76_dev *mdev, enum mt76_rxq_id q,
 		if (!mt7915_mac_fill_rx(dev, skb, q, info)) {
 			if (mt7915_npu_active(dev) &&
 			    (q == MT_RXQ_NPU0 || q == MT_RXQ_NPU1))
-				mt7915_npu_rx_status(dev, skb);
+				mt7915_npu_rx_status(dev, skb, *info);
 			mt76_rx(&dev->mt76, q, skb);
 			return;
 		}
