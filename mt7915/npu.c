@@ -354,7 +354,6 @@ int mt7915_npu_init(struct mt7915_dev *dev)
 	struct airoha_npu *npu;
 	struct pci_host_bridge *bridge;
 	struct resource res;
-	__le32 version;
 	enum airoha_npu_wlan_chip model;
 	u8 queue;
 	int i, j, err;
@@ -369,21 +368,6 @@ int mt7915_npu_init(struct mt7915_dev *dev)
 	npu = airoha_npu_get(device);
 	if (IS_ERR(npu))
 		return PTR_ERR(npu);
-	if (IS_ENABLED(CONFIG_CPU_BIG_ENDIAN) || (!is_mt7915(&dev->mt76) && !is_mt7916(&dev->mt76)) ||
-	    !of_device_is_compatible(npu->dev->of_node, "airoha,en7523-npu")) {
-		err = -EOPNOTSUPP;
-		goto put_npu;
-	}
-	err = airoha_npu_wlan_get_msg(npu, 0, WLAN_FUNC_GET_WAIT_NPU_VERSION,
-				     &version, sizeof(version), GFP_KERNEL);
-	if (err)
-		goto put_npu;
-	if (le32_to_cpu(version) < 0x070e0100 ||
-	    le32_to_cpu(version) >> 24 != 7) {
-		err = -EOPNOTSUPP;
-		goto put_npu;
-	}
-
 	model = is_mt7916(&dev->mt76) ? AIROHA_NPU_WLAN_MT7916 :
 		    (dev->dbdc_support ? AIROHA_NPU_WLAN_MT7915_DBDC : AIROHA_NPU_WLAN_MT7915);
 
