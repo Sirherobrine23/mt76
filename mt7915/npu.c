@@ -63,6 +63,7 @@ struct mt7915_npu_queue {
 
 struct mt7915_npu {
 	struct airoha_npu *npu;
+	struct airoha_ppe_dev *ppe;
 	struct net_device *napi_dev;
 	struct mt7915_npu_queue q[2];
 	void *ba;
@@ -196,7 +197,7 @@ static int mt7915_npu_poll(struct napi_struct *napi, int budget)
 		vendor = READ_ONCE(desc->vendor);
 		skb = mt7915_npu_rx(q, ctrl, info,
 				    q->buf + q->head * MT7915_NPU_BUF_SIZE);
-		if (skb && !(vendor & MT7915_NPU_RX_PPE) && skb->len >= MT_TXD_SIZE) {
+		if (skb && skb->len >= MT_TXD_SIZE) {
 			u32 rx_info = vendor;
 
 			memset(skb->cb, 0, sizeof(skb->cb));
@@ -340,6 +341,8 @@ void mt7915_npu_cleanup(struct mt7915_dev *dev)
 	mt7915_npu_queues &= ~priv->queue_mask;
 	mutex_unlock(&mt7915_npu_lock);
 	airoha_npu_put(priv->npu);
+	if (priv->ppe)
+		airoha_ppe_put_dev(priv->ppe);
 	kfree(priv);
 	dev->npu = NULL;
 }
@@ -366,7 +369,7 @@ int mt7915_npu_init(struct mt7915_dev *dev)
 	npu = airoha_npu_get(device);
 	if (IS_ERR(npu))
 		return PTR_ERR(npu);
-	if (IS_ENABLED(CONFIG_CPU_BIG_ENDIAN) || !is_mt7915(&dev->mt76) ||
+	if (IS_ENABLED(CONFIG_CPU_BIG_ENDIAN) || (!is_mt7915(&dev->mt76) && !is_mt7916(&dev->mt76)) ||
 	    !of_device_is_compatible(npu->dev->of_node, "airoha,en7523-npu")) {
 		err = -EOPNOTSUPP;
 		goto put_npu;
@@ -375,7 +378,7 @@ int mt7915_npu_init(struct mt7915_dev *dev)
 				     &version, sizeof(version), GFP_KERNEL);
 	if (err)
 		goto put_npu;
-	if (le32_to_cpu(version) < 0x070e0000 ||
+	if (le32_to_cpu(version) < 0x070e0100 ||
 	    le32_to_cpu(version) >> 24 != 7) {
 		err = -EOPNOTSUPP;
 		goto put_npu;
@@ -411,6 +414,12 @@ int mt7915_npu_init(struct mt7915_dev *dev)
 	}
 	priv->npu = npu;
 	dev->npu = priv;
+	priv->ppe = airoha_ppe_get_dev(device);
+	if (IS_ERR(priv->ppe)) {
+		err = PTR_ERR(priv->ppe);
+		priv->ppe = NULL;
+		goto cleanup;
+	}
 
 	/* Refuse an already configured host adapter, including a Wi-Fi 7 consumer. */
 	for (i = 0; i < ARRAY_SIZE(priv->q); i++) {
@@ -509,12 +518,12 @@ int mt7915_npu_init(struct mt7915_dev *dev)
 			      WLAN_FUNC_SET_WAIT_HWNAT_INIT, 1, GFP_KERNEL);
 	if (err)
 		goto cleanup;
-	/* Keep host delivery without a station authorization/replay interface. */
+	/* Only authorized open-network BA sessions are admitted to the PPE. */
 	for (i = 0; i < ARRAY_SIZE(priv->q); i++) {
 		if (!(priv->band_mask & BIT(i)))
 			continue;
 		err = mt7915_npu_send(dev, i, WLAN_FUNC_SET_WAIT_IS_FORCE_TO_CPU,
-				      1, GFP_KERNEL);
+				      0, GFP_KERNEL);
 		if (err)
 			goto cleanup;
 		err = mt7915_npu_send(dev, i, WLAN_FUNC_SET_WAIT_PCIE_PORT_TYPE,
@@ -530,7 +539,8 @@ int mt7915_npu_init(struct mt7915_dev *dev)
 		if (err)
 			goto cleanup;
 	}
-	dev_info(device, "NPU RX: model %u, port %u, host delivery\n",
+	priv->direct = true;
+	dev_info(device, "NPU RX: model %u, port %u, open-network PPE ingress\n",
 			 model, priv->port);
 	return 0;
 
@@ -653,10 +663,9 @@ int mt7915_npu_sta_clear(struct mt7915_dev *dev, unsigned int band, u16 wcid)
 void mt7915_npu_rx_status(struct mt7915_dev *dev, struct sk_buff *skb, u32 info)
 {
 	struct mt76_rx_status *status = (void *)skb->cb;
-	struct ieee80211_bar *bar;
-	u16 control, ssn;
-	u32 val;
-	int err;
+	struct airoha_ppe_dev *ppe;
+	struct mt7915_sta *msta;
+	struct ieee80211_vif *vif;
 
 	/* Only trust reorder and replay checks explicitly reported by Clanker. */
 	if (info & MT7915_NPU_RX_PN_VALID)
@@ -667,22 +676,23 @@ void mt7915_npu_rx_status(struct mt7915_dev *dev, struct sk_buff *skb, u32 info)
 	}
 	if (info & MT7915_NPU_RX_BYPASS_BA)
 		status->aggr = false;
-	if (status->flag & RX_FLAG_8023 || skb->len < sizeof(*bar))
-		return;
-	bar = mt76_skb_get_hdr(skb);
-	if (!ieee80211_is_back_req(bar->frame_control) || !status->wcid)
-		return;
-	control = le16_to_cpu(bar->control);
-	if (control & IEEE80211_BAR_CTRL_MULTI_TID ||
-	    ((control & IEEE80211_BAR_CTRL_TID_INFO_MASK) >> 12) > 7)
-		return;
-	ssn = le16_to_cpu(bar->start_seq_num) >> 4;
-	val = ((u32)ssn << 11) | ((u32)status->wcid->idx << 3) |
-	      ((control & IEEE80211_BAR_CTRL_TID_INFO_MASK) >> 12);
-	err = mt7915_npu_send(dev, status->phy_idx, WLAN_FUNC_SET_WAIT_BAR_INFO,
-			      val, GFP_ATOMIC);
-	if (err)
-		dev_warn_ratelimited(dev->mt76.dev, "NPU BAR update failed: %d\n", err);
+	if ((info & MT7915_NPU_RX_PPE) && (status->flag & RX_FLAG_8023) &&
+	    status->wcid && status->wcid->sta) {
+		msta = container_of(status->wcid, struct mt7915_sta, wcid);
+		if (!msta->npu_authorized || !msta->vif)
+			return;
+		vif = container_of((void *)msta->vif, struct ieee80211_vif, drv_priv);
+		skb->dev = ieee80211_vif_to_wdev(vif)->netdev;
+		skb_reset_mac_header(skb);
+		ppe = dev->npu->ppe;
+		if (ppe && ppe->ops.check_skb_reason)
+			airoha_ppe_dev_check_skb_reason(ppe, skb, info & 0x7fff,
+						      (info >> 16) & 31,
+						      AIROHA_PPE_RX_GEM_NONE);
+		else if (ppe && ((info >> 16) & 31) ==
+			 PPE_CPU_REASON_HIT_UNBIND_RATE_REACHED)
+			airoha_ppe_dev_check_skb(ppe, skb, info & 0x7fff, true);
+	}
 }
 
 static int mt7915_npu_status_show(struct seq_file *s, void *data)

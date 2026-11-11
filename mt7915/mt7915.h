@@ -146,6 +146,7 @@ enum vow_drr_ctrl_id {
 
 struct mt7915_sta {
 	struct mt76_wcid wcid; /* must be first */
+	bool npu_authorized;
 
 	struct mt7915_vif *vif;
 
