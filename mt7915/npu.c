@@ -623,7 +623,7 @@ int mt7915_npu_start(struct mt7915_dev *dev)
 int mt7915_npu_ba(struct mt7915_dev *dev, unsigned int band, u16 wcid,
 		  u8 tid, u16 ssn, u16 size)
 {
-	u32 data[] = { wcid, tid, ssn, size };
+	u32 packed;
 
 	if (!dev->npu)
 		return 0;
@@ -631,8 +631,15 @@ int mt7915_npu_ba(struct mt7915_dev *dev, unsigned int band, u16 wcid,
 		return 0;
 	if (size > 256)
 		return -EOPNOTSUPP;
+
+	/* ClankerNPU expects one packed u32, not an array of fields:
+	 * [31:20] SSN, [19:11] BA window, [10:3] WCID, [2:0] TID.
+	 */
+	packed = ((u32)(ssn & 0xfff) << 20) |
+		 ((u32)size << 11) | ((u32)wcid << 3) | tid;
+
 	return mt7915_npu_send_data(dev, band, WLAN_FUNC_SET_WAIT_BA_WIN_SIZE,
-				    data, sizeof(data));
+				    &packed, sizeof(packed));
 }
 
 int mt7915_npu_sta_clear(struct mt7915_dev *dev, unsigned int band, u16 wcid)
