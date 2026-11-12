@@ -59,6 +59,14 @@ struct mt7915_npu_queue {
 	atomic64_t interrupts;
 	atomic64_t descriptors;
 	atomic64_t packets;
+	/* Host-adaptor RX diagnostics. Counters are cumulative and lockless. */
+	atomic64_t napi_polls;
+	atomic64_t napi_budget_full;
+	atomic64_t napi_max_batch;
+	atomic64_t invalid_desc;
+	atomic64_t alloc_fail;
+	atomic64_t short_frame;
+	atomic64_t reassembled;
 };
 
 struct mt7915_npu {
@@ -142,12 +150,16 @@ static struct sk_buff *mt7915_npu_rx(struct mt7915_npu_queue *q, u32 ctrl,
 		skb = napi_alloc_skb(&q->napi, len);
 		if (skb)
 			skb_put_data(skb, data, len);
+		else
+			atomic64_inc(&q->alloc_fail);
 		return skb;
 	}
 
 	if (part == 1) {
 		mt7915_npu_drop_partial(q);
 		q->partial = napi_alloc_skb(&q->napi, len);
+		if (!q->partial)
+			atomic64_inc(&q->alloc_fail);
 		q->total = len;
 	}
 
@@ -167,9 +179,11 @@ static struct sk_buff *mt7915_npu_rx(struct mt7915_npu_queue *q, u32 ctrl,
 	q->partial = NULL;
 	q->part = 0;
 	q->total = 0;
+	atomic64_inc(&q->reassembled);
 	return skb;
 
 invalid:
+	atomic64_inc(&q->invalid_desc);
 	mt7915_npu_drop_partial(q);
 	return NULL;
 }
@@ -181,7 +195,9 @@ static int mt7915_npu_poll(struct napi_struct *napi, int budget)
 	struct airoha_npu *npu = dev->npu->npu;
 	enum mt76_rxq_id qid = MT_RXQ_NPU0 + q->local_band;
 	int done = 0;
+	s64 max;
 
+	atomic64_inc(&q->napi_polls);
 	rcu_read_lock();
 	while (done < budget) {
 		struct mt7915_npu_desc *desc = &q->desc[q->head];
@@ -204,6 +220,8 @@ static int mt7915_npu_poll(struct napi_struct *napi, int budget)
 			atomic64_inc(&q->packets);
 			mt7915_queue_rx_skb(&dev->mt76, qid, skb, &rx_info);
 		} else {
+			if (skb)
+				atomic64_inc(&q->short_frame);
 			dev_kfree_skb_any(skb);
 		}
 
@@ -214,6 +232,17 @@ static int mt7915_npu_poll(struct napi_struct *napi, int budget)
 		q->head = (q->head + 1) % MT7915_NPU_DESC_NUM;
 		atomic64_inc(&q->descriptors);
 		done++;
+	}
+
+	if (done == budget)
+		atomic64_inc(&q->napi_budget_full);
+	max = atomic64_read(&q->napi_max_batch);
+	while (done > max) {
+		s64 prev = atomic64_cmpxchg(&q->napi_max_batch, max, done);
+
+		if (prev == max)
+			break;
+		max = prev;
 	}
 
 	/* Return descriptors only after all packet bytes have been copied. */
@@ -614,15 +643,6 @@ int mt7915_npu_start(struct mt7915_dev *dev)
 			mt7915_npu_stop(dev);
 			return err;
 		}
-		/* Diagnostic only: bypass Clanker BA reorder for RX A/B test.
-		 * Remove this block after measuring.
-		 */
-		err = mt7915_npu_send(dev, i, WLAN_FUNC_SET_WAIT_IS_TEST_NOBA,
-				      1, GFP_KERNEL);
-		if (err) {
-			mt7915_npu_stop(dev);
-			return err;
-		}
 		airoha_npu_wlan_enable_irq(priv->npu, q->band);
 	}
 	priv->started = true;
@@ -711,11 +731,27 @@ static int mt7915_npu_status_show(struct seq_file *s, void *data)
 	for (i = 0; i < ARRAY_SIZE(priv->q); i++) {
 		struct mt7915_npu_queue *q = &priv->q[i];
 
+		u32 producer, consumer;
+
 		if (!(priv->band_mask & BIT(i)))
 			continue;
 		seq_printf(s, "band%d: channel=%u irq=%d interrupts=%lld descriptors=%lld packets=%lld\n",
 			   i, q->band, q->irq, atomic64_read(&q->interrupts),
 			   atomic64_read(&q->descriptors), atomic64_read(&q->packets));
+		seq_printf(s, "band%d: napi_polls=%lld budget_full=%lld max_batch=%lld invalid_desc=%lld alloc_fail=%lld short_frame=%lld reassembled=%lld\n",
+			   i, atomic64_read(&q->napi_polls),
+			   atomic64_read(&q->napi_budget_full),
+			   atomic64_read(&q->napi_max_batch),
+			   atomic64_read(&q->invalid_desc),
+			   atomic64_read(&q->alloc_fail),
+			   atomic64_read(&q->short_frame),
+			   atomic64_read(&q->reassembled));
+		/* Read-only: the NPU owns producer; Linux returns the consumer. */
+		if (!regmap_read(priv->npu->regmap, q->regs + 8, &producer) &&
+		    !regmap_read(priv->npu->regmap, q->regs + 0xc, &consumer))
+			seq_printf(s, "band%d: host_ring_head=%u producer=%u consumer=%u size=%u\n",
+				   i, READ_ONCE(q->head), producer, consumer,
+				   MT7915_NPU_DESC_NUM);
 	}
 	return 0;
 }
