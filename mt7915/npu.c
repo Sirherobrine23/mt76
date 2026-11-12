@@ -614,6 +614,15 @@ int mt7915_npu_start(struct mt7915_dev *dev)
 			mt7915_npu_stop(dev);
 			return err;
 		}
+		/* Diagnostic only: bypass Clanker BA reorder for RX A/B test.
+		 * Remove this block after measuring.
+		 */
+		err = mt7915_npu_send(dev, i, WLAN_FUNC_SET_WAIT_IS_TEST_NOBA,
+				      1, GFP_KERNEL);
+		if (err) {
+			mt7915_npu_stop(dev);
+			return err;
+		}
 		airoha_npu_wlan_enable_irq(priv->npu, q->band);
 	}
 	priv->started = true;

@@ -316,6 +316,13 @@ int mt7915_dma_start(struct mt7915_dev *dev, bool reset, bool wed_reset)
 		int ret;
 
 		wed_irq_mask |= MT_INT_TX_DONE_BAND0 | MT_INT_TX_DONE_BAND1;
+		/* The NPU owns the Wi-Fi data RX rings and their descriptors.
+		 * Do not also route their completion interrupts through WED.
+		 * Keep MCU/WA events and WED TX completions untouched.
+		 */
+		if (mt7915_npu_active(dev))
+			wed_irq_mask &= ~(MT_INT_RX(MT_RXQ_MAIN) |
+					  MT_INT_RX(MT_RXQ_BAND1));
 		if (!is_mt798x(&dev->mt76))
 			mt76_wr(dev, MT_INT_WED_MASK_CSR, wed_irq_mask);
 		else
