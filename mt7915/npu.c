@@ -26,6 +26,9 @@
 #define MT7915_NPU_RX_BYPASS_BA	BIT(29)
 #define MT7915_NPU_RX_PPE		BIT(28)
 #define MT7915_NPU_STA_MAX	150
+/* EN7523 can return a slot index before SRAM auto-learning reaches 0x0f. */
+#define MT7915_NPU_PPE_FOE_UNHIT	0x0d
+#define MT7915_NPU_PPE_HIT_UNBIND	0x0e
 
 /* ClankerNPU host receive descriptor, 24 bytes on the wire. */
 struct mt7915_npu_desc {
@@ -686,6 +689,7 @@ void mt7915_npu_rx_status(struct mt7915_dev *dev, struct sk_buff *skb, u32 info)
 	struct airoha_ppe_dev *ppe;
 	struct mt7915_sta *msta;
 	struct ieee80211_vif *vif;
+	u8 reason = (info >> 16) & 31;
 
 	/* Only trust reorder and replay checks explicitly reported by Clanker. */
 	if (info & MT7915_NPU_RX_PN_VALID)
@@ -707,10 +711,15 @@ void mt7915_npu_rx_status(struct mt7915_dev *dev, struct sk_buff *skb, u32 info)
 		ppe = dev->npu->ppe;
 		if (ppe && ppe->ops.check_skb_reason)
 			airoha_ppe_dev_check_skb_reason(ppe, skb, info & 0x7fff,
-						      (info >> 16) & 31,
-						      AIROHA_PPE_RX_GEM_NONE);
-		else if (ppe && ((info >> 16) & 31) ==
-			 PPE_CPU_REASON_HIT_UNBIND_RATE_REACHED)
+						      reason, AIROHA_PPE_RX_GEM_NONE);
+		/* The EN7523 V2 backend exposes check_skb, without the
+		 * reason-aware callback. Like its Ethernet RX path, learn from
+		 * FOE_UNHIT and HIT_UNBIND as well as the rate-reached case.
+		 */
+		else if (ppe &&
+			 (reason == MT7915_NPU_PPE_FOE_UNHIT ||
+			  reason == MT7915_NPU_PPE_HIT_UNBIND ||
+			  reason == PPE_CPU_REASON_HIT_UNBIND_RATE_REACHED))
 			airoha_ppe_dev_check_skb(ppe, skb, info & 0x7fff, true);
 	}
 }
