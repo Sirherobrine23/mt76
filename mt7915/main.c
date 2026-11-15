@@ -377,7 +377,7 @@ static int mt7915_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 	struct mt76_wcid *wcid = &msta->wcid;
 	u8 *wcid_keyidx = &wcid->hw_key_idx;
 	int idx = key->keyidx;
-	int err = 0;
+	int err = 0, i;
 
 	if (sta && !wcid->sta) {
 		if (cmd != SET_KEY)
@@ -416,6 +416,29 @@ static int mt7915_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 	}
 
 	mutex_lock(&dev->mt76.mutex);
+
+	/* Key changes retire NPU BA state before the new replay epoch. */
+	if (cmd == SET_KEY && sta) {
+		err = mt7915_npu_sta_clear(dev, phy->mt76->band_idx, wcid->idx);
+		if (err)
+			goto out;
+	} else if (cmd == SET_KEY && mt7915_npu_active(dev)) {
+		for (i = 1; i < ARRAY_SIZE(dev->mt76.wcid); i++) {
+			struct mt76_wcid *peer;
+			struct mt7915_sta *peer_sta;
+
+			peer = rcu_dereference_protected(dev->mt76.wcid[i],
+					lockdep_is_held(&dev->mt76.mutex));
+			if (!peer || !peer->sta)
+				continue;
+			peer_sta = container_of(peer, struct mt7915_sta, wcid);
+			if (peer_sta->vif != mvif)
+				continue;
+			err = mt7915_npu_sta_clear(dev, phy->mt76->band_idx, i);
+			if (err)
+				goto out;
+		}
+	}
 
 	if (cmd == SET_KEY && !sta && !mvif->mt76.cipher) {
 		mvif->mt76.cipher = mt76_connac_mcu_get_cipher(key->cipher);
@@ -766,7 +789,7 @@ int mt7915_mac_sta_add(struct mt76_dev *mdev, struct ieee80211_vif *vif,
 	struct mt7915_sta *msta = (struct mt7915_sta *)sta->drv_priv;
 	struct mt7915_vif *mvif = (struct mt7915_vif *)vif->drv_priv;
 	bool ext_phy = mvif->phy != &dev->phy;
-	int idx;
+	int idx, err;
 
 	if (mtk_wed_device_active(&dev->mt76.mmio.wed) &&
 	    !is_mt7915(&dev->mt76) &&
@@ -778,6 +801,12 @@ int mt7915_mac_sta_add(struct mt76_dev *mdev, struct ieee80211_vif *vif,
 
 	if (idx < 0)
 		return -ENOSPC;
+
+	err = mt7915_npu_sta_clear(dev, mvif->phy->mt76->band_idx, idx);
+	if (err) {
+		mt76_wcid_mask_clear(mdev->wcid_mask, idx);
+		return err;
+	}
 
 	INIT_LIST_HEAD(&msta->rc_list);
 	INIT_LIST_HEAD(&msta->wcid.poll_list);
@@ -909,6 +938,12 @@ void mt7915_mac_sta_remove(struct mt76_dev *mdev, struct ieee80211_vif *vif,
 {
 	struct mt7915_dev *dev = container_of(mdev, struct mt7915_dev, mt76);
 	struct mt7915_sta *msta = (struct mt7915_sta *)sta->drv_priv;
+	int err;
+
+	err = mt7915_npu_sta_clear(dev, msta->vif->phy->mt76->band_idx,
+				   msta->wcid.idx);
+	if (err)
+		dev_warn(mdev->dev, "NPU station cleanup failed: %d\n", err);
 
 	mt7915_mac_wtbl_update(dev, msta->wcid.idx,
 			       MT_WTBL_UPDATE_ADM_COUNT_CLEAR);
@@ -988,10 +1023,23 @@ mt7915_ampdu_action(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 		mt76_rx_aggr_start(&dev->mt76, &msta->wcid, tid, ssn,
 				   params->buf_size);
 		ret = mt7915_mcu_add_rx_ba(dev, params, true);
+		/* Kite BA also reorders protected frames; PN stays with mac80211. */
+		if (!ret && msta->npu_authorized &&
+		    vif->type == NL80211_IFTYPE_AP)
+			ret = mt7915_npu_ba(dev, msta->vif->phy->mt76->band_idx,
+					    msta->wcid.idx, tid, ssn,
+					    params->buf_size);
+		if (ret) {
+			mt7915_mcu_add_rx_ba(dev, params, false);
+			mt76_rx_aggr_stop(&dev->mt76, &msta->wcid, tid);
+		}
 		break;
 	case IEEE80211_AMPDU_RX_STOP:
 		mt76_rx_aggr_stop(&dev->mt76, &msta->wcid, tid);
-		ret = mt7915_mcu_add_rx_ba(dev, params, false);
+		ret = mt7915_npu_ba(dev, msta->vif->phy->mt76->band_idx,
+				    msta->wcid.idx, tid, 0, 0);
+		if (!ret)
+			ret = mt7915_mcu_add_rx_ba(dev, params, false);
 		break;
 	case IEEE80211_AMPDU_TX_OPERATIONAL:
 		mtxq->aggr = true;
@@ -1853,6 +1901,29 @@ mt7915_reconfig_complete(struct ieee80211_hw *hw,
 				     MT7915_WATCHDOG_TIME);
 }
 
+static int mt7915_sta_state(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
+			    struct ieee80211_sta *sta,
+			    enum ieee80211_sta_state old_state,
+			    enum ieee80211_sta_state new_state)
+{
+	struct mt7915_dev *dev = mt7915_hw_dev(hw);
+	struct mt7915_sta *msta = (struct mt7915_sta *)sta->drv_priv;
+	struct mt7915_vif *mvif = (struct mt7915_vif *)vif->drv_priv;
+	int ret;
+
+	if (old_state == IEEE80211_STA_AUTHORIZED && new_state < old_state) {
+		ret = mt7915_npu_sta_clear(dev, mvif->phy->mt76->band_idx,
+					   msta->wcid.idx);
+		if (ret)
+			return ret;
+		msta->npu_authorized = false;
+	}
+	ret = mt76_sta_state(hw, vif, sta, old_state, new_state);
+	if (!ret && new_state == IEEE80211_STA_AUTHORIZED)
+		msta->npu_authorized = true;
+	return ret;
+}
+
 const struct ieee80211_ops mt7915_ops = {
 	.add_chanctx = ieee80211_emulate_add_chanctx,
 	.remove_chanctx = ieee80211_emulate_remove_chanctx,
@@ -1869,7 +1940,7 @@ const struct ieee80211_ops mt7915_ops = {
 	.bss_info_changed = mt7915_bss_info_changed,
 	.start_ap = mt7915_start_ap,
 	.stop_ap = mt7915_stop_ap,
-	.sta_state = mt76_sta_state,
+	.sta_state = mt7915_sta_state,
 	.sta_pre_rcu_remove = mt76_sta_pre_rcu_remove,
 	.link_sta_rc_update = mt7915_sta_rc_update,
 	.set_key = mt7915_set_key,

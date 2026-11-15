@@ -198,6 +198,7 @@ free_wed_or_irq_vector:
 	else
 		pci_free_irq_vectors(pdev);
 free_device:
+	mt7915_npu_cleanup(dev);
 	mt76_free_device(&dev->mt76);
 
 	return ret;

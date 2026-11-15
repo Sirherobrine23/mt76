@@ -146,6 +146,7 @@ enum vow_drr_ctrl_id {
 
 struct mt7915_sta {
 	struct mt76_wcid wcid; /* must be first */
+	bool npu_authorized;
 
 	struct mt7915_vif *vif;
 
@@ -260,6 +261,8 @@ struct mt7915_dev {
 		struct mt76_dev mt76;
 		struct mt76_phy mphy;
 	};
+
+	struct mt7915_npu *npu;
 
 	struct mt7915_hif *hif2;
 	struct mt7915_reg_desc reg;
@@ -580,8 +583,77 @@ int mt7915_mcu_fw_dbg_ctrl(struct mt7915_dev *dev, u32 module, u8 level);
 void mt7915_mcu_rx_event(struct mt7915_dev *dev, struct sk_buff *skb);
 void mt7915_mcu_exit(struct mt7915_dev *dev);
 
+#ifdef CONFIG_MT7915_NPU
+bool mt7915_npu_active(struct mt7915_dev *dev);
+int mt7915_npu_init(struct mt7915_dev *dev);
+int mt7915_npu_rx_ring(struct mt7915_dev *dev, enum mt76_rxq_id qid,
+			unsigned int count, u32 regs);
+int mt7915_npu_start(struct mt7915_dev *dev);
+int mt7915_npu_stop(struct mt7915_dev *dev);
+void mt7915_npu_cleanup(struct mt7915_dev *dev);
+int mt7915_npu_ba(struct mt7915_dev *dev, unsigned int band, u16 wcid,
+		  u8 tid, u16 ssn, u16 size);
+int mt7915_npu_sta_clear(struct mt7915_dev *dev, unsigned int band, u16 wcid);
+void mt7915_npu_rx_status(struct mt7915_dev *dev, struct sk_buff *skb, u32 info);
+void mt7915_npu_debugfs(struct mt7915_dev *dev, struct dentry *dir);
+#else
+static inline bool mt7915_npu_active(struct mt7915_dev *dev)
+{
+	return false;
+}
+
+static inline int mt7915_npu_init(struct mt7915_dev *dev)
+{
+	return 0;
+}
+
+static inline int mt7915_npu_rx_ring(struct mt7915_dev *dev,
+				      enum mt76_rxq_id qid,
+				      unsigned int count, u32 regs)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int mt7915_npu_start(struct mt7915_dev *dev)
+{
+	return 0;
+}
+
+static inline int mt7915_npu_stop(struct mt7915_dev *dev)
+{
+	return 0;
+}
+
+static inline void mt7915_npu_cleanup(struct mt7915_dev *dev)
+{
+}
+
+static inline int mt7915_npu_ba(struct mt7915_dev *dev, unsigned int band,
+			      u16 wcid, u8 tid, u16 ssn, u16 size)
+{
+	return 0;
+}
+
+static inline int mt7915_npu_sta_clear(struct mt7915_dev *dev,
+				     unsigned int band, u16 wcid)
+{
+	return 0;
+}
+
+static inline void mt7915_npu_rx_status(struct mt7915_dev *dev,
+				     struct sk_buff *skb, u32 info)
+{
+}
+
+static inline void mt7915_npu_debugfs(struct mt7915_dev *dev, struct dentry *dir)
+{
+}
+#endif
+
 static inline u16 mt7915_wtbl_size(struct mt7915_dev *dev)
 {
+	if (mt7915_npu_active(dev))
+		return 256;
 	return is_mt7915(&dev->mt76) ? MT7915_WTBL_SIZE : MT7916_WTBL_SIZE;
 }
 
