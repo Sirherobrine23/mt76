@@ -4,8 +4,8 @@
 #include "mt7615.h"
 #include "mac.h"
 
-#if IS_ENABLED(CONFIG_NET_AIROHA_SOC_WED)
-static bool wed_enable;
+#ifdef CONFIG_NET_AIROHA_SOC_WED
+static bool wed_enable = true;
 module_param(wed_enable, bool, 0644);
 MODULE_PARM_DESC(wed_enable, "Enable Airoha WED transmit offload");
 
@@ -31,10 +31,12 @@ static u32 mt7615_wed_init_buf(void *ptr, dma_addr_t phys, int token)
 
 int mt7615_wed_init(struct mt7615_dev *dev, struct device *device, int *irq)
 {
-#if IS_ENABLED(CONFIG_NET_AIROHA_SOC_WED)
+	dev_warn(device, "Init attaching WED\n");
+#ifdef CONFIG_NET_AIROHA_SOC_WED
 	struct mtk_wed_device *wed = &dev->mt76.mmio.wed;
 	struct pci_dev *pdev;
 	u32 base;
+	int ret;
 
 	if (!wed_enable || !is_mt7615(&dev->mt76) || !dev_is_pci(device))
 		return 0;
@@ -61,11 +63,16 @@ int mt7615_wed_init(struct mt7615_dev *dev, struct device *device, int *irq)
 	wed->wlan.offload_enable = mt76_wed_offload_enable;
 	wed->wlan.offload_disable = mt76_wed_offload_disable;
 
-	if (mtk_wed_device_attach(wed))
+	ret = mtk_wed_device_attach(wed);
+	if (ret) {
+		dev_warn(device, "Airoha WED attach failed: %d\n", ret);
 		return 0;
+	}
 
 	dev->mt76.dma_dev = wed->dev;
 	*irq = wed->irq;
+	dev_info(device, "Airoha WED attached: WDMA%d, IRQ %d, TX ring 0\n",
+		 wed->wdma_idx, wed->irq);
 #endif
 	return 0;
 }

@@ -1333,16 +1333,22 @@ static int mt7615_net_fill_forward_path(struct ieee80211_hw *hw,
 	struct mt7615_vif *mvif = (struct mt7615_vif *)vif->drv_priv;
 	struct mt7615_sta *msta = (struct mt7615_sta *)sta->drv_priv;
 	struct mtk_wed_device *wed = &dev->mt76.mmio.wed;
+	struct mt76_phy *phy = hw->priv;
+	struct mt76_queue *q = phy->q_tx[MT_TXQ_BE];
 
 	if (!mtk_wed_device_active(wed))
 		return -ENODEV;
+
+	if (!q || q->wed != wed || !(q->flags & MT_QFLAG_WED) ||
+	    FIELD_GET(MT_QFLAG_WED_TYPE, q->flags) != MT76_WED_Q_TX)
+		return -EOPNOTSUPP;
 
 	path->type = DEV_PATH_MTK_WDMA;
 	path->dev = ctx->dev;
 	path->mtk_wdma.wdma_idx = wed->wdma_idx;
 	path->mtk_wdma.bss = mvif->mt76.idx;
-	/* Both PHYs share MT7615 TX ring 0. */
-	path->mtk_wdma.queue = 0;
+	/* Both PHYs use the WED ring backing their shared TX queue. */
+	path->mtk_wdma.queue = FIELD_GET(MT_QFLAG_WED_RING, q->flags);
 	path->mtk_wdma.wcid = msta->wcid.idx;
 	ctx->dev = NULL;
 
