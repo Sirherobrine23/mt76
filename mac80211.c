@@ -1579,7 +1579,7 @@ void mt76_rx_complete(struct mt76_dev *dev, struct sk_buff_head *frames,
 		return;
 	}
 
-#if IS_ENABLED(CONFIG_NET_AIROHA_WHNAT)
+#if IS_ENABLED(CONFIG_NET_AIROHA)
 	/* Looked up once per poll; the hook keeps the frames it takes. */
 	if (!mtk_wed_device_active(&dev->mmio.wed))
 		whnat_early = symbol_get(en75_whnat_upstream_early);
@@ -1590,7 +1590,7 @@ void mt76_rx_complete(struct mt76_dev *dev, struct sk_buff_head *frames,
 			continue;
 		napi_gro_receive(napi, skb);
 	}
-#if IS_ENABLED(CONFIG_NET_AIROHA_WHNAT)
+#if IS_ENABLED(CONFIG_NET_AIROHA)
 	if (whnat_early)
 		symbol_put(en75_whnat_upstream_early);
 #endif
