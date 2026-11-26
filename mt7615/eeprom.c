@@ -71,15 +71,50 @@ static int mt7615_efuse_init(struct mt7615_dev *dev, u32 base)
 	return 0;
 }
 
+static int mt7615_eeprom_load_precal(struct mt76_dev *dev)
+{
+	u8 *eeprom = dev->eeprom.data;
+	int len, ret;
+
+	ret = mt76_get_of_data_from_nvmem(dev, eeprom, "eeprom",
+					 MT7615_EEPROM_SIZE);
+	if (ret)
+		return ret;
+
+	if (get_unaligned_le16(eeprom) != 0x7615)
+		return -EINVAL;
+
+	/* The caldata cell starts with RX DCOC, followed by TX DPD. */
+	if (eeprom[MT_EE_CALDATA_FLASH] & MT_EE_CALDATA_FLASH_TX_DPD)
+		len = MT7615_EEPROM_FULL_SIZE - MT7615_EEPROM_DCOC_OFFSET;
+	else if (eeprom[MT_EE_CALDATA_FLASH] & MT_EE_CALDATA_FLASH_RX_CAL)
+		len = MT7615_EEPROM_TXDPD_OFFSET - MT7615_EEPROM_DCOC_OFFSET;
+	else
+		return 0;
+
+	return mt76_get_of_data_from_nvmem(dev, eeprom + MT7615_EEPROM_DCOC_OFFSET,
+					  "precal", len);
+}
+
 static int mt7615_eeprom_load(struct mt7615_dev *dev, u32 addr)
 {
+	struct mt76_dev *mdev = &dev->mt76;
 	int ret;
 
 	BUILD_BUG_ON(MT7615_EEPROM_FULL_SIZE < MT7663_EEPROM_SIZE);
 
-	ret = mt76_eeprom_init(&dev->mt76, MT7615_EEPROM_FULL_SIZE);
+	ret = mt76_eeprom_init(mdev, MT7615_EEPROM_FULL_SIZE);
 	if (ret < 0)
 		return ret;
+
+	if (!ret && is_mt7615(mdev) &&
+	    of_property_match_string(mdev->dev->of_node, "nvmem-cell-names",
+				     "precal") >= 0) {
+		ret = mt7615_eeprom_load_precal(mdev);
+		if (ret)
+			return dev_err_probe(mdev->dev, ret,
+					     "failed to load split EEPROM\n");
+	}
 
 	return mt7615_efuse_init(dev, addr);
 }

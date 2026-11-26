@@ -24,8 +24,10 @@ static void mt7615_pci_init_work(struct work_struct *work)
 		ret = mt7615_mcu_init(dev);
 	}
 
-	if (ret)
+	if (ret) {
+		dev_err(dev->mt76.dev, "MCU initialization failed: %d\n", ret);
 		return;
+	}
 
 	mt7615_init_work(dev);
 }

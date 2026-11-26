@@ -32,8 +32,12 @@ static int mt7615_start(struct ieee80211_hw *hw)
 	bool running;
 	int ret;
 
-	if (!mt7615_wait_for_mcu_init(dev))
+	if (!mt7615_wait_for_mcu_init(dev)) {
+		dev_err(dev->mt76.dev,
+			"Cannot start PHY%u: MCU firmware is not running\n",
+			phy->mt76->band_idx);
 		return -EIO;
+	}
 
 	mt7615_mutex_acquire(dev);
 

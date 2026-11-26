@@ -1244,8 +1244,11 @@ static int mt7615_load_patch(struct mt7615_dev *dev, u32 addr, const char *name)
 	int len, ret, sem;
 
 	ret = firmware_request_nowarn(&fw, name, dev->mt76.dev);
-	if (ret)
+	if (ret) {
+		dev_err(dev->mt76.dev, "Failed to load ROM patch %s: %d\n",
+			name, ret);
 		return ret;
+	}
 
 	if (!fw || !fw->data || fw->size < sizeof(*hdr)) {
 		dev_err(dev->mt76.dev, "Invalid firmware\n");
